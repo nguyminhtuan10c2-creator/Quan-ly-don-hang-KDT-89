@@ -1,0 +1,6 @@
+{
+  "name": "OrderManager",
+  "description": "Order management and inventory tracking web application with delivery scheduling and printable delivery slips.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
