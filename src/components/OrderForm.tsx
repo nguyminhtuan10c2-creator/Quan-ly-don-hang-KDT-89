@@ -68,6 +68,14 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   // Local products state to react to quick added products
   const [localProducts, setLocalProducts] = useState<Product[]>(products && products.length ? products : getProducts());
 
+  useEffect(() => {
+    if (products && products.length > 0) {
+      setLocalProducts(products);
+    } else {
+      setLocalProducts(getProducts());
+    }
+  }, [products]);
+
   // Employee Creator Info
   const [employeeId, setEmployeeId] = useState(editingOrder ? editingOrder.employeeId : activeStaff.employeeId);
   const [employeeName, setEmployeeName] = useState(editingOrder ? editingOrder.employeeName : activeStaff.employeeName);
@@ -132,15 +140,15 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   }, []);
 
   const POPULAR_SEARCH_KEYWORDS = [
+    'Máy lạnh Daikin',
     'Tủ lạnh Inverter',
-    'Máy giặt 10kg',
-    'Smart Tivi 4K',
-    'iPhone 15',
-    'Điều hòa Daikin',
-    'Samsung',
-    'Panasonic',
-    'LG TurboWash',
-    'Aqua',
+    'Máy giặt Panasonic',
+    'Smart Tivi Samsung',
+    'Quạt đứng Senko',
+    'Nồi chiên Sunhouse',
+    'Bếp điện từ',
+    'LG Inverter',
+    'Casper',
   ];
 
   // Helper to highlight matching keyword tokens in product names

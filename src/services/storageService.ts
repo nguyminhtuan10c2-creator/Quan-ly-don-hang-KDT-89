@@ -36,13 +36,13 @@ export const getOrderStatusLabel = (status: OrderStatus): string => {
 };
 
 const STORAGE_KEYS = {
-  PRODUCTS: 'ordermanager_products_v2',
-  ORDERS: 'ordermanager_orders_v2',
-  STAFF: 'ordermanager_staff_v2',
-  STORE: 'ordermanager_store_v2',
-  ACTIVE_STAFF_ID: 'ordermanager_active_staff_id_v2',
-  CATEGORIES: 'ordermanager_categories_v2',
-  BRANDS: 'ordermanager_brands_v2',
+  PRODUCTS: 'ordermanager_products_v5',
+  ORDERS: 'ordermanager_orders_v5',
+  STAFF: 'ordermanager_staff_v5',
+  STORE: 'ordermanager_store_v5',
+  ACTIVE_STAFF_ID: 'ordermanager_active_staff_id_v5',
+  CATEGORIES: 'ordermanager_categories_v5',
+  BRANDS: 'ordermanager_brands_v5',
 };
 
 // Event listener mechanism for reactivity
@@ -140,6 +140,18 @@ export const getProducts = (): Product[] => {
   }
   // Initialize default
   localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
+  return INITIAL_PRODUCTS;
+};
+
+/**
+ * Resets inventory back to the 328 products from the file TON_13-101_b069d2c8.csv
+ * with the 6 strict categories: Tivi, Tủ lạnh, Máy giặt, Quạt, Máy lạnh, Gia dụng.
+ */
+export const reloadInventoryFromReport = (): Product[] => {
+  localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
+  localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
+  localStorage.setItem(STORAGE_KEYS.BRANDS, JSON.stringify(INITIAL_BRANDS));
+  notifyListeners();
   return INITIAL_PRODUCTS;
 };
 

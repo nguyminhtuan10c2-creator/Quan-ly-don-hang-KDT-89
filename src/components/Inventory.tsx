@@ -43,6 +43,7 @@ import {
   saveBrand,
   quickUpdateProductStockAndPrice,
   exportProductPriceAuditAsCsv,
+  reloadInventoryFromReport,
 } from '../services/storageService';
 
 interface InventoryProps {
@@ -86,6 +87,9 @@ export const Inventory: React.FC<InventoryProps> = ({
   // Price History Timeline Modal State
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [historyTargetProduct, setHistoryTargetProduct] = useState<Product | null>(null);
+
+  // Sync Toast State
+  const [syncSuccessToast, setSyncSuccessToast] = useState<string | null>(null);
 
   // Full Add/Edit Product Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -393,6 +397,19 @@ export const Inventory: React.FC<InventoryProps> = ({
 
         <div className="flex flex-wrap items-center gap-2.5">
           <button
+            onClick={() => {
+              reloadInventoryFromReport();
+              setSyncSuccessToast('Đã nạp thành công 328 sản phẩm tồn kho từ file 13/10/2026 thuộc 6 nhóm yêu cầu!');
+              setTimeout(() => setSyncSuccessToast(null), 5000);
+            }}
+            className="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-center space-x-1.5 transition-all shadow-xs"
+            title="Khôi phục / Nạp lại danh mục 328 sản phẩm chuẩn từ file TON_13-101.csv"
+          >
+            <RefreshCw className="w-4 h-4 text-sky-600" />
+            <span>Nạp file tồn 13/10 (328 SP)</span>
+          </button>
+
+          <button
             onClick={() => exportProductPriceAuditAsCsv(filteredProducts)}
             className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-center space-x-1.5 transition-all shadow-xs"
             title="Xuất bảng kiểm soát giá & tồn kho ra file Excel/CSV"
@@ -420,6 +437,43 @@ export const Inventory: React.FC<InventoryProps> = ({
           </button>
         </div>
       </div>
+
+      {/* File Import Context Info Banner */}
+      <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-emerald-50 border border-blue-200 p-3.5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs shadow-xs">
+        <div className="flex items-center space-x-2.5">
+          <div className="p-2 rounded-xl bg-blue-600 text-white font-bold shrink-0">
+            <ShieldCheck className="w-4 h-4" />
+          </div>
+          <div>
+            <p className="font-extrabold text-slate-800">
+              Dữ liệu tồn kho chính thức (13/10/2026): <span className="text-blue-700">328 sản phẩm</span>
+            </p>
+            <p className="text-slate-600 text-[11px] mt-0.5">
+              Đã lọc chính xác <strong>6 nhóm mặt hàng</strong> theo yêu cầu: <span className="font-semibold text-slate-900">Tivi, Tủ lạnh, Máy giặt, Quạt, Máy lạnh, Gia dụng</span>. Loại bỏ toàn bộ vật tư, linh kiện, dụng cụ & dịch vụ.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0 self-end md:self-auto">
+          <span className="bg-white/80 border border-blue-200 text-blue-800 px-2.5 py-1 rounded-lg font-bold text-[11px]">
+            File: TON_13-101.csv
+          </span>
+          <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-1 rounded-lg font-bold text-[11px]">
+            ✓ Đã chuẩn hoá tiếng Việt
+          </span>
+        </div>
+      </div>
+
+      {syncSuccessToast && (
+        <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-xl text-xs font-semibold flex items-center justify-between shadow-xs animate-in fade-in">
+          <div className="flex items-center space-x-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{syncSuccessToast}</span>
+          </div>
+          <button onClick={() => setSyncSuccessToast(null)} className="text-emerald-700 hover:text-emerald-900">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* KPI Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -589,6 +643,48 @@ export const Inventory: React.FC<InventoryProps> = ({
               </select>
             </div>
           </div>
+        </div>
+
+        {/* Category Filter Pills (6 Allowed Categories) */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 text-xs">
+          <span className="text-[11px] font-bold text-slate-500 mr-1 flex items-center gap-1">
+            <Tag className="w-3 h-3 text-blue-600" />
+            Nhóm hàng:
+          </span>
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all ${
+              selectedCategory === 'all'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Tất cả ({products.length})
+          </button>
+          {[
+            { name: 'Máy lạnh', color: 'text-sky-700 bg-sky-50 border-sky-200' },
+            { name: 'Gia dụng', color: 'text-amber-700 bg-amber-50 border-amber-200' },
+            { name: 'Máy giặt', color: 'text-indigo-700 bg-indigo-50 border-indigo-200' },
+            { name: 'Quạt', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+            { name: 'Tivi', color: 'text-purple-700 bg-purple-50 border-purple-200' },
+            { name: 'Tủ lạnh', color: 'text-teal-700 bg-teal-50 border-teal-200' },
+          ].map((catItem) => {
+            const count = products.filter((p) => p.category === catItem.name).length;
+            const isSelected = selectedCategory === catItem.name;
+            return (
+              <button
+                key={catItem.name}
+                onClick={() => setSelectedCategory(isSelected ? 'all' : catItem.name)}
+                className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border transition-all ${
+                  isSelected
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : `${catItem.color} hover:opacity-80`
+                }`}
+              >
+                {catItem.name} ({count})
+              </button>
+            );
+          })}
         </div>
 
         {/* Stock Filter Pills */}
