@@ -165,6 +165,9 @@ export interface StoreInfo {
   address: string;
   taxCode: string;
   website: string;
+  bankAccount?: string;
+  bankName?: string;
+  bankOwner?: string;
   lat?: number;
   lng?: number;
 }

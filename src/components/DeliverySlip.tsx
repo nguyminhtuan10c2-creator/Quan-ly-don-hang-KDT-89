@@ -392,12 +392,12 @@ export const DeliverySlip: React.FC<DeliverySlipProps> = ({ order, onClose }) =>
             {/* Left: Logo & Company Address */}
             {showCompanyInfo ? (
               <div className="flex items-center space-x-3 max-w-[500px]">
-                <div className="w-14 h-14 border-2 border-slate-900 rounded-xl flex flex-col items-center justify-center p-1 shrink-0 bg-slate-50 shadow-xs print:border-black print:shadow-none">
-                  <div className="w-full flex items-center justify-center space-x-0.5">
-                    <span className="font-black text-rose-600 text-sm tracking-tighter">KDT</span>
-                    <span className="font-extrabold text-blue-900 text-[10px]">-89</span>
-                  </div>
-                  <span className="text-[7px] text-slate-500 uppercase font-sans font-bold">Appliance</span>
+                <div className="w-16 h-16 border border-slate-300 rounded-lg flex items-center justify-center p-1 shrink-0 bg-white shadow-xs print:border-none print:shadow-none overflow-hidden">
+                  <img
+                    src="/assets/aistudio/logo_Cty_KDT-10_d91b9dae.png"
+                    alt="Logo Công ty KDT-89"
+                    className="w-full h-full object-contain"
+                  />
                 </div>
 
                 <div className="space-y-0.5 flex-1">

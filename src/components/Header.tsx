@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { PackageCheck, User, RefreshCw, Store, ShieldCheck, UserCheck, Database, HardDrive } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { PackageCheck, User, RefreshCw, Store, ShieldCheck, UserCheck, Database, HardDrive, Cloud, CheckCircle, Loader2 } from 'lucide-react';
 import { getActiveStaff, getStoreInfo, resetToDemoData } from '../services/storageService';
 import { StaffModal } from './StaffModal';
+import { syncAllToFirebase, subscribeToSyncStatus, FirebaseSyncStatus } from '../services/firebaseService';
 
 interface HeaderProps {
   onNavigate: (tab: string) => void;
@@ -10,8 +11,37 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenDataManagement }) => {
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<FirebaseSyncStatus>({
+    isConfigured: true,
+    isConnected: true,
+    isSyncing: false,
+    lastSyncedAt: null,
+    error: null,
+    totalSyncedOrders: 0,
+  });
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
   const activeStaff = getActiveStaff();
   const storeInfo = getStoreInfo();
+
+  useEffect(() => {
+    const unsub = subscribeToSyncStatus((status) => {
+      setSyncStatus(status);
+    });
+    return unsub;
+  }, []);
+
+  const handleQuickCloudSync = async () => {
+    try {
+      setSyncMessage('Đang đồng bộ...');
+      const res = await syncAllToFirebase();
+      setSyncMessage(`Đã đồng bộ ${res.count} đơn lên Cloud!`);
+      setTimeout(() => setSyncMessage(null), 3000);
+    } catch (err: any) {
+      setSyncMessage('Lỗi đồng bộ');
+      setTimeout(() => setSyncMessage(null), 3500);
+    }
+  };
 
   const handleReset = () => {
     if (window.confirm('Bạn có chắc chắn muốn khôi phục dữ liệu mẫu ban đầu không?')) {
@@ -26,16 +56,20 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenDataManagement
           <div className="flex items-center justify-between h-16">
             {/* Logo & Store Title */}
             <div className="flex items-center space-x-3 cursor-pointer" onClick={() => onNavigate('dashboard')}>
-              <div className="bg-blue-600 p-2.5 rounded-xl shadow-lg shadow-blue-500/20 flex items-center justify-center text-white">
-                <PackageCheck className="w-6 h-6" />
+              <div className="h-11 w-auto bg-white/10 p-1 rounded-xl border border-slate-700/60 shadow-lg flex items-center justify-center overflow-hidden">
+                <img
+                  src="/assets/aistudio/logo_Cty_KDT-10_d91b9dae.png"
+                  alt="KDT-89 Logo"
+                  className="h-9 w-auto object-contain"
+                />
               </div>
               <div>
                 <div className="flex items-center space-x-2">
-                  <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-blue-200 bg-clip-text text-transparent">
-                    OrderManager
+                  <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-amber-200 bg-clip-text text-transparent">
+                    KDT-89 Logistics
                   </span>
-                  <span className="bg-blue-900/80 text-blue-300 text-xs px-2 py-0.5 rounded-full border border-blue-700/50 font-medium">
-                    v2.5
+                  <span className="bg-amber-500/20 text-amber-300 text-xs px-2 py-0.5 rounded-full border border-amber-500/30 font-medium">
+                    dienmaykdt89.com
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 flex items-center space-x-1">
@@ -47,6 +81,27 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenDataManagement
 
             {/* Quick Actions & Staff Profile */}
             <div className="flex items-center space-x-2 sm:space-x-3">
+              {/* Firebase Cloud Sync Button */}
+              <button
+                onClick={handleQuickCloudSync}
+                disabled={syncStatus.isSyncing}
+                title={`Đồng bộ cơ sở dữ liệu Firebase Cloud (second-spanner-gvxch)${syncStatus.lastSyncedAt ? ' - Lần cuối: ' + syncStatus.lastSyncedAt : ''}`}
+                className="flex items-center space-x-1.5 text-xs font-bold text-amber-300 hover:text-white bg-amber-950/70 hover:bg-amber-900/90 px-3 py-1.5 rounded-xl border border-amber-700/60 transition-colors shadow-xs"
+              >
+                {syncStatus.isSyncing ? (
+                  <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                ) : (
+                  <Cloud className="w-3.5 h-3.5 text-amber-400" />
+                )}
+                <span className="hidden sm:inline">
+                  {syncMessage || (syncStatus.isSyncing ? 'Đang lưu...' : 'Cloud Firebase')}
+                </span>
+                <span className="sm:hidden">
+                  {syncStatus.isSyncing ? '...' : 'Cloud'}
+                </span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-slate-900 shrink-0" title="Đã kết nối Firebase" />
+              </button>
+
               {/* Data & Storage Management Button */}
               {onOpenDataManagement && (
                 <button

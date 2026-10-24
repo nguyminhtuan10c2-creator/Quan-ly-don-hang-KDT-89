@@ -1,0 +1,110 @@
+{
+  "entities": {
+    "Order": {
+      "title": "Order",
+      "description": "Delivery order with customer details, items, logistics, and pricing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "orderCode": { "type": "string", "maxLength": 64 },
+        "customerName": { "type": "string", "maxLength": 128 },
+        "customerPhone": { "type": "string", "maxLength": 32 },
+        "deliveryAddress": { "type": "string", "maxLength": 512 },
+        "deliveryLat": { "type": "number" },
+        "deliveryLng": { "type": "number" },
+        "employeeId": { "type": "string", "maxLength": 64 },
+        "employeeName": { "type": "string", "maxLength": 128 },
+        "totalAmount": { "type": "number" },
+        "subtotal": { "type": "number" },
+        "shippingFee": { "type": "number" },
+        "prepaidAmount": { "type": "number" },
+        "remainingAmount": { "type": "number" },
+        "deliveryDate": { "type": "string", "maxLength": 32 },
+        "deliveryTime": { "type": "string", "maxLength": 64 },
+        "deliveryStaffId": { "type": "string", "maxLength": 64 },
+        "deliveryStaffName": { "type": "string", "maxLength": 128 },
+        "deliveryStaffPhone": { "type": "string", "maxLength": 32 },
+        "deliveryNotes": { "type": "string", "maxLength": 1000 },
+        "paymentStatus": { "type": "string", "enum": ["paid", "partial", "unpaid"] },
+        "paymentMethod": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["pending", "pending_pickup", "delivering", "in_transit", "completed", "delivered", "failed", "cancelled"] },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "orderCode", "customerName", "customerPhone", "deliveryAddress", "totalAmount", "status", "createdAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Product catalog item with SKU, price, stock, and warranty rules",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 256 },
+        "sku": { "type": "string", "maxLength": 64 },
+        "stock": { "type": "number" },
+        "price": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "category": { "type": "string", "maxLength": 128 },
+        "brand": { "type": "string", "maxLength": 128 },
+        "isWarrantyEligible": { "type": "boolean" },
+        "warrantyMonths": { "type": "number" },
+        "activationBonusAmount": { "type": "number" },
+        "description": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "name", "sku", "stock", "price", "createdAt"]
+    },
+    "Staff": {
+      "title": "Staff",
+      "description": "Store staff member or delivery driver",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "employeeId": { "type": "string", "maxLength": 64 },
+        "employeeName": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "enum": ["Admin", "Sales", "Delivery"] },
+        "email": { "type": "string", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "avatar": { "type": "string", "maxLength": 1024 }
+      },
+      "required": ["id", "employeeId", "employeeName", "role", "phone"]
+    },
+    "StoreInfo": {
+      "title": "StoreInfo",
+      "description": "Store enterprise profile, bank accounts, and warehouse location",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 256 },
+        "phone": { "type": "string", "maxLength": 64 },
+        "address": { "type": "string", "maxLength": 512 },
+        "taxCode": { "type": "string", "maxLength": 64 },
+        "website": { "type": "string", "maxLength": 256 },
+        "bankAccount": { "type": "string", "maxLength": 64 },
+        "bankName": { "type": "string", "maxLength": 64 },
+        "bankOwner": { "type": "string", "maxLength": 128 },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" }
+      },
+      "required": ["name", "phone", "address"]
+    }
+  },
+  "firestore": {
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Delivery order tracking and fulfillment documents"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Product catalog and inventory quantities"
+    },
+    "/staff/{staffId}": {
+      "schema": "Staff",
+      "description": "Staff employee directory and drivers"
+    },
+    "/storeSettings/info": {
+      "schema": "StoreInfo",
+      "description": "Store identity and configuration"
+    }
+  }
+}

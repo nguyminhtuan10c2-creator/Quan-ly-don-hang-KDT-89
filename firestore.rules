@@ -1,0 +1,101 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default-deny all paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // ----------------------------------------------------
+    // Entity Validations
+    // ----------------------------------------------------
+
+    function isValidOrder(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.orderCode is string && data.orderCode.size() > 0 && data.orderCode.size() <= 64
+        && data.customerName is string && data.customerName.size() > 0 && data.customerName.size() <= 128
+        && data.customerPhone is string && data.customerPhone.size() > 0 && data.customerPhone.size() <= 32
+        && data.deliveryAddress is string && data.deliveryAddress.size() <= 512
+        && data.totalAmount is number && data.totalAmount >= 0
+        && data.status in ['pending', 'pending_pickup', 'delivering', 'in_transit', 'completed', 'delivered', 'failed', 'cancelled']
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000));
+    }
+
+    function isValidProduct(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 256
+        && data.sku is string && data.sku.size() > 0 && data.sku.size() <= 64
+        && data.stock is number && data.stock >= 0
+        && data.price is number && data.price >= 0;
+    }
+
+    function isValidStaff(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.employeeId is string && data.employeeId.size() > 0 && data.employeeId.size() <= 64
+        && data.employeeName is string && data.employeeName.size() > 0 && data.employeeName.size() <= 128
+        && data.role in ['Admin', 'Sales', 'Delivery']
+        && data.phone is string && data.phone.size() <= 32;
+    }
+
+    function isValidStoreInfo(data) {
+      return data.name is string && data.name.size() <= 256
+        && data.phone is string && data.phone.size() <= 64
+        && data.address is string && data.address.size() <= 512;
+    }
+
+    // ----------------------------------------------------
+    // Collection Match Blocks
+    // ----------------------------------------------------
+
+    match /orders/{orderId} {
+      allow read: if isValidId(orderId);
+      allow create: if isValidId(orderId) && isValidOrder(incoming());
+      allow update: if isValidId(orderId) && isValidOrder(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(orderId);
+    }
+
+    match /products/{productId} {
+      allow read: if isValidId(productId);
+      allow create: if isValidId(productId) && isValidProduct(incoming());
+      allow update: if isValidId(productId) && isValidProduct(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(productId);
+    }
+
+    match /staff/{staffId} {
+      allow read: if isValidId(staffId);
+      allow create: if isValidId(staffId) && isValidStaff(incoming());
+      allow update: if isValidId(staffId) && isValidStaff(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(staffId);
+    }
+
+    match /storeSettings/{docId} {
+      allow read: if isValidId(docId);
+      allow create, update: if isValidId(docId) && isValidStoreInfo(incoming());
+      allow delete: if false;
+    }
+
+    // Connection testing endpoint
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

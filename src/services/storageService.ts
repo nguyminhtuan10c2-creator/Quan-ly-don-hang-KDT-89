@@ -1462,6 +1462,29 @@ export const importOrdersData = (
   }
 };
 
+export const getStaffList = (): Staff[] => {
+  return getStaff();
+};
+
+export const saveStaffList = (staffList: Staff[]) => {
+  localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(staffList));
+  notifyListeners();
+};
+
+export const saveOrders = (orders: Order[]) => {
+  localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+  notifyListeners();
+};
+
+export const saveProducts = (products: Product[]) => {
+  localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+  notifyListeners();
+};
+
+export const saveStoreInfo = (info: StoreInfo) => {
+  updateStoreInfo(info);
+};
+
 /**
  * Generate 15 rich historical orders from past months for testing and demo reporting
  */

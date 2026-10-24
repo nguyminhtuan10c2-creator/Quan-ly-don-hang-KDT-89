@@ -16,6 +16,10 @@ import {
   ArrowRight,
   Copy,
   FileText,
+  Cloud,
+  ShieldCheck,
+  Check,
+  Loader2,
 } from 'lucide-react';
 import { Order } from '../types';
 import {
@@ -29,6 +33,12 @@ import {
   formatVND,
   formatDateVI,
 } from '../services/storageService';
+import {
+  syncAllToFirebase,
+  pullFromFirebase,
+  subscribeToSyncStatus,
+  FirebaseSyncStatus,
+} from '../services/firebaseService';
 
 interface DataManagementModalProps {
   isOpen: boolean;
@@ -41,8 +51,16 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
   onClose,
   onDataChanged,
 }) => {
-  const [activeTab, setActiveTab] = useState<'import' | 'capacity' | 'export'>('import');
+  const [activeTab, setActiveTab] = useState<'import' | 'capacity' | 'export' | 'firebase'>('firebase');
   const [stats, setStats] = useState<StorageUsageStats | null>(null);
+  const [cloudStatus, setCloudStatus] = useState<FirebaseSyncStatus>({
+    isConfigured: true,
+    isConnected: true,
+    isSyncing: false,
+    lastSyncedAt: null,
+    error: null,
+    totalSyncedOrders: 0,
+  });
   const [importMode, setImportMode] = useState<'append' | 'overwrite'>('append');
   const [pasteContent, setPasteContent] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -53,10 +71,55 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
       refreshStats();
       setStatusMessage(null);
     }
+    const unsub = subscribeToSyncStatus((status) => {
+      setCloudStatus(status);
+    });
+    return unsub;
   }, [isOpen]);
 
   const refreshStats = () => {
     setStats(getStorageUsageStats());
+  };
+
+  const handleSyncToCloud = async () => {
+    setIsProcessing(true);
+    setStatusMessage(null);
+    try {
+      const res = await syncAllToFirebase();
+      setStatusMessage({
+        type: 'success',
+        text: `Đã đồng bộ thành công ${res.count} đơn hàng, kho sản phẩm và nhân sự lên Firebase Firestore Cloud!`,
+      });
+      refreshStats();
+    } catch (err: any) {
+      setStatusMessage({
+        type: 'error',
+        text: `Lỗi đồng bộ Firebase: ${err.message || 'Không thể ghi dữ liệu'}`,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handlePullFromCloud = async () => {
+    setIsProcessing(true);
+    setStatusMessage(null);
+    try {
+      const res = await pullFromFirebase();
+      setStatusMessage({
+        type: 'success',
+        text: `Đã tải về thành công ${res.ordersCount} đơn hàng từ Firebase Firestore Cloud!`,
+      });
+      refreshStats();
+      onDataChanged();
+    } catch (err: any) {
+      setStatusMessage({
+        type: 'error',
+        text: `Lỗi tải dữ liệu từ Firebase: ${err.message || 'Không thể đọc dữ liệu'}`,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -289,6 +352,20 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
 
         {/* Tab Selection */}
         <div className="flex border-b border-slate-200 bg-slate-50 px-6 pt-3 space-x-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('firebase')}
+            className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all border-b-2 ${
+              activeTab === 'firebase'
+                ? 'bg-white text-amber-600 border-amber-600 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 border-transparent hover:bg-slate-100'
+            }`}
+          >
+            <Cloud className="w-4 h-4 text-amber-500" />
+            <span>Firebase Cloud</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+          </button>
+
           <button
             type="button"
             onClick={() => setActiveTab('import')}
@@ -663,6 +740,154 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
                 >
                   Tải Mẫu .csv
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 4: FIREBASE CLOUD SYNC & BACKUP                      */}
+          {/* ======================================================== */}
+          {activeTab === 'firebase' && (
+            <div className="space-y-6">
+              {/* Cloud Connection Overview Card */}
+              <div className="bg-gradient-to-r from-amber-900/90 to-amber-950 p-6 rounded-2xl text-white shadow-md border border-amber-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="p-2 bg-amber-500 rounded-xl text-slate-950 shadow-md">
+                      <Cloud className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-black text-amber-200">
+                        Cơ Sở Dữ Liệu Firebase Cloud Đã Kết Nối
+                      </h4>
+                      <p className="text-xs text-amber-100/80">
+                        Lưu trữ trực tuyến cho chuỗi bán hàng KDT-89 Appliance
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>Trạng thái: Trực Tuyến (Online)</span>
+                    </span>
+                    <span className="text-xs text-amber-200/90 bg-amber-800/60 px-2.5 py-1 rounded-full font-mono border border-amber-700/60">
+                      Project: second-spanner-gvxch
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-start md:items-end justify-center text-xs text-amber-200/90 space-y-1 bg-amber-950/60 p-3.5 rounded-xl border border-amber-800/60">
+                  <div className="flex items-center space-x-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span className="font-semibold text-emerald-300">Bảo mật Firestore ABAC Rules: Đã kích hoạt</span>
+                  </div>
+                  <p className="text-[11px] text-amber-300/70">
+                    Lần đồng bộ gần nhất: {cloudStatus.lastSyncedAt || 'Chưa đồng bộ'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons: Sync to Cloud / Pull from Cloud */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 1. Sync Local to Cloud */}
+                <div className="bg-white p-5 rounded-xl border-2 border-amber-200 shadow-sm flex flex-col justify-between space-y-4 hover:border-amber-400 transition-all">
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2 bg-amber-100 rounded-lg text-amber-700">
+                        <UploadCloud className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h5 className="font-black text-sm text-slate-900">
+                          1. Đẩy Dữ Liệu Lên Cloud (Push to Cloud)
+                        </h5>
+                        <span className="text-[11px] text-slate-500">
+                          Đồng bộ toàn bộ đơn hàng, kho sản phẩm và nhân sự lên Firebase
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Lưu trữ vĩnh viễn trên Cloud Firebase. Khi đổi trình duyệt, dùng máy tính khác hoặc máy tính bảng của shipper, dữ liệu vẫn được bảo toàn trọn vẹn.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSyncToCloud}
+                    disabled={isProcessing}
+                    className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-extrabold text-xs py-3 px-4 rounded-xl flex items-center justify-center space-x-2 shadow-md transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Đang đẩy dữ liệu lên Firebase...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Cloud className="w-4 h-4" />
+                        <span>Đẩy Toàn Bộ Dữ Liệu Lên Firebase</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* 2. Pull from Cloud to Local */}
+                <div className="bg-white p-5 rounded-xl border-2 border-blue-200 shadow-sm flex flex-col justify-between space-y-4 hover:border-blue-400 transition-all">
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2 bg-blue-100 rounded-lg text-blue-700">
+                        <Download className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h5 className="font-black text-sm text-slate-900">
+                          2. Tải Dữ Liệu Về Máy (Pull from Cloud)
+                        </h5>
+                        <span className="text-[11px] text-slate-500">
+                          Đồng bộ dữ liệu mới nhất từ Firebase về máy hiện tại
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Hữu ích khi bạn mở ứng dụng trên một thiết bị mới hoặc muốn khôi phục lại các đơn hàng và danh mục sản phẩm đã được lưu trữ trên Firebase Cloud trước đó.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handlePullFromCloud}
+                    disabled={isProcessing}
+                    className="w-full bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-xs py-3 px-4 rounded-xl flex items-center justify-center space-x-2 shadow-md transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Đang tải về từ Firebase...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4" />
+                        <span>Tải Dữ Liệu Từ Firebase Về Máy</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Cloud Information & Safeguards */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-2">
+                <div className="flex items-center space-x-2 text-slate-800 font-bold">
+                  <Info className="w-4 h-4 text-blue-600" />
+                  <span>Thông tin kỹ thuật cấu hình:</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                    <span className="text-slate-400 block">Database ID:</span>
+                    <span className="font-mono font-medium text-slate-800 break-all">ai-studio-ordermanager-926266d5-3b1e-41d1-837e-20a3b3e8a991</span>
+                  </div>
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                    <span className="text-slate-400 block">Auth Domain:</span>
+                    <span className="font-mono font-medium text-slate-800">second-spanner-gvxch.firebaseapp.com</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
