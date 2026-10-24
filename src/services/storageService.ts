@@ -111,6 +111,192 @@ export const removeVietnameseTones = (str: string): string => {
     .toLowerCase();
 };
 
+/**
+ * Calculate Great-Circle distance (Haversine formula) in kilometers between two GPS coordinates
+ */
+export const calculateDistanceKm = (
+  lat1?: number,
+  lon1?: number,
+  lat2?: number,
+  lon2?: number
+): number => {
+  if (lat1 === undefined || lon1 === undefined || lat2 === undefined || lon2 === undefined) {
+    return 0;
+  }
+  if (!Number.isFinite(lat1) || !Number.isFinite(lon1) || !Number.isFinite(lat2) || !Number.isFinite(lon2)) {
+    return 0;
+  }
+  try {
+    const R = 6371; // Earth radius in km
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const dist = R * c;
+    return Number(dist.toFixed(1));
+  } catch {
+    return 0;
+  }
+};
+
+/**
+ * Estimate travel time in minutes for delivery in urban traffic (~2.8 min/km + 6 mins buffer)
+ */
+export const estimateTravelTimeMinutes = (distanceKm: number): number => {
+  if (distanceKm <= 0) return 10;
+  return Math.round(distanceKm * 2.8 + 6);
+};
+
+/**
+ * Generate native Google Maps directions URL for shipper mobile navigation
+ */
+export const getGoogleMapsDirectionsUrl = (
+  originLat?: number,
+  originLng?: number,
+  destAddressOrLat?: string | number,
+  destLng?: number
+): string => {
+  if (typeof originLat === 'number' && typeof originLng === 'number' && typeof destAddressOrLat === 'number' && typeof destLng === 'number') {
+    return `https://www.google.com/maps/dir/?api=1&origin=${originLat},${originLng}&destination=${destAddressOrLat},${destLng}&travelmode=driving`;
+  }
+  const dest = typeof destAddressOrLat === 'string' ? encodeURIComponent(destAddressOrLat) : `${destAddressOrLat},${destLng}`;
+  return `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving`;
+};
+
+/**
+ * Generate native OpenStreetMap / OSRM directions URL (100% Free, no API Key needed)
+ */
+export const getOsmDirectionsUrl = (
+  originLat: number,
+  originLng: number,
+  destLat: number,
+  destLng: number
+): string => {
+  return `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${originLat}%2C${originLng}%3B${destLat}%2C${destLng}`;
+};
+
+export interface RoadStep {
+  instruction: string;
+  distanceMeters: number;
+  durationSeconds: number;
+  streetName: string;
+}
+
+export interface RealRoadRoute {
+  distanceKm: number;
+  durationMinutes: number;
+  coordinates: [number, number][]; // [lat, lng] array for Leaflet polyline
+  steps: RoadStep[];
+}
+
+/**
+ * Fetch real street-following driving route & turn-by-turn steps from free OSRM engine
+ */
+export const fetchRealRoadRoute = async (
+  originLat: number,
+  originLng: number,
+  destLat: number,
+  destLng: number
+): Promise<RealRoadRoute | null> => {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destLng},${destLat}?overview=full&geometries=geojson&steps=true`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) return null;
+
+    const route = data.routes[0];
+    const distanceKm = Number((route.distance / 1000).toFixed(1));
+    const durationMinutes = Math.max(1, Math.round(route.duration / 60));
+
+    // Convert GeoJSON [lng, lat] to Leaflet [lat, lng]
+    const coordinates: [number, number][] = (route.geometry?.coordinates || []).map(
+      (c: [number, number]) => [c[1], c[0]]
+    );
+
+    const steps: RoadStep[] = [];
+    if (route.legs && route.legs[0] && Array.isArray(route.legs[0].steps)) {
+      route.legs[0].steps.forEach((st: any) => {
+        const type = st.maneuver?.type || '';
+        const modifier = st.maneuver?.modifier || '';
+        const street = st.name || '';
+        let action = 'Đi tiếp';
+
+        if (type === 'depart') action = 'Bắt đầu xuất phát';
+        else if (type === 'arrive') action = 'Đến điểm nhận hàng của khách';
+        else if (modifier === 'left' || modifier === 'sharp left') action = 'Rẽ trái vào';
+        else if (modifier === 'right' || modifier === 'sharp right') action = 'Rẽ phải vào';
+        else if (modifier === 'slight left') action = 'Chếch sang trái vào';
+        else if (modifier === 'slight right') action = 'Chếch sang phải vào';
+        else if (modifier === 'straight') action = 'Đi thẳng theo';
+        else if (type === 'roundabout') action = 'Đi qua vòng xoay vào';
+
+        const instr = street ? `${action} ${street}` : action;
+        steps.push({
+          instruction: instr,
+          distanceMeters: Math.round(st.distance || 0),
+          durationSeconds: Math.round(st.duration || 0),
+          streetName: street,
+        });
+      });
+    }
+
+    return {
+      distanceKm,
+      durationMinutes,
+      coordinates,
+      steps,
+    };
+  } catch (err) {
+    console.warn('Could not fetch OSRM route:', err);
+    return null;
+  }
+};
+
+
+/**
+ * Nearest-Neighbor TSP optimization for ordering delivery stops
+ * starts from startPos (Shipper current GPS or Warehouse) and iteratively visits the nearest remaining stop.
+ */
+export const optimizeDeliveryRouteSequence = <T extends { deliveryLat?: number; deliveryLng?: number; id: string }>(
+  startPos: [number, number],
+  items: T[]
+): T[] => {
+  if (!items || items.length <= 1) return items;
+
+  const remaining = [...items];
+  const ordered: T[] = [];
+  let currentPos = startPos;
+
+  while (remaining.length > 0) {
+    let nearestIdx = 0;
+    let shortestDist = Infinity;
+
+    for (let i = 0; i < remaining.length; i++) {
+      const item = remaining[i];
+      const lat = item.deliveryLat ?? currentPos[0];
+      const lng = item.deliveryLng ?? currentPos[1];
+      const dist = calculateDistanceKm(currentPos[0], currentPos[1], lat, lng);
+      if (dist < shortestDist) {
+        shortestDist = dist;
+        nearestIdx = i;
+      }
+    }
+
+    const nextStop = remaining.splice(nearestIdx, 1)[0];
+    ordered.push(nextStop);
+    currentPos = [nextStop.deliveryLat ?? currentPos[0], nextStop.deliveryLng ?? currentPos[1]];
+  }
+
+  return ordered;
+};
+
+
 // --- PRODUCTS ---
 export const getProducts = (): Product[] => {
   try {
@@ -1949,3 +2135,74 @@ export const exportRevenueReportAsCsv = (periodLabel: string, orders: Order[]) =
   link.click();
   URL.revokeObjectURL(url);
 };
+
+/**
+ * Export Sales Team & Employee Revenue Report as CSV
+ */
+export const exportSalesTeamReportAsCsv = (
+  periodLabel: string,
+  staffStats: Array<{
+    employeeId: string;
+    employeeName: string;
+    role: string;
+    totalOrders: number;
+    completedOrders: number;
+    deliveringOrders: number;
+    cancelledOrders: number;
+    successRate: number;
+    realizedRevenue: number;
+    inFlightRevenue: number;
+    totalRevenue: number;
+    contributionShare: number;
+    averageOrderValue: number;
+    totalBonusEarned: number;
+  }>
+) => {
+  const headers = [
+    'Xếp hạng',
+    'Mã NV',
+    'Tên Nhân Viên',
+    'Bộ phận / Vai trò',
+    'Tổng số đơn',
+    'Đơn hoàn thành',
+    'Đơn đang giao',
+    'Đơn hủy',
+    'Tỷ lệ thành công (%)',
+    'Doanh thu thực tế (VNĐ)',
+    'Doanh thu đang giao (VNĐ)',
+    'Tổng doanh thu tạo ra (VNĐ)',
+    'Tỷ lệ đóng góp Team Sale (%)',
+    'Giá trị TB / đơn AOV (VNĐ)',
+    'Thưởng kích hoạt BH (VNĐ)',
+  ];
+
+  const rows = staffStats.map((s, idx) => {
+    return [
+      idx + 1,
+      `"${s.employeeId}"`,
+      `"${(s.employeeName || '').replace(/"/g, '""')}"`,
+      `"${s.role}"`,
+      s.totalOrders,
+      s.completedOrders,
+      s.deliveringOrders,
+      s.cancelledOrders,
+      `"${s.successRate}%"`,
+      s.realizedRevenue,
+      s.inFlightRevenue,
+      s.totalRevenue,
+      `"${s.contributionShare}%"`,
+      Math.round(s.averageOrderValue),
+      s.totalBonusEarned,
+    ].join(',');
+  });
+
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `OrderManager_DoanhThu_TeamSale_${periodLabel}_${new Date().toISOString().slice(0, 10)}.csv`);
+  link.click();
+  URL.revokeObjectURL(url);
+};
+

@@ -237,19 +237,26 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   };
 
   // Filtered Products List
-  const filteredProducts = localProducts.filter((p) => {
-    if (selectedCategoryFilter !== 'all' && p.category !== selectedCategoryFilter) {
-      return false;
-    }
-    const brand = getProductBrand(p);
-    if (selectedBrandFilter !== 'all' && brand !== selectedBrandFilter) {
-      return false;
-    }
-    if (productSearchQuery.trim()) {
-      return matchProductKeywords(p, productSearchQuery, brand);
-    }
-    return true;
-  });
+  const filteredProducts = localProducts
+    .filter((p) => {
+      if (selectedCategoryFilter !== 'all' && p.category !== selectedCategoryFilter) {
+        return false;
+      }
+      const brand = getProductBrand(p);
+      if (selectedBrandFilter !== 'all' && brand !== selectedBrandFilter) {
+        return false;
+      }
+      if (productSearchQuery.trim()) {
+        return matchProductKeywords(p, productSearchQuery, brand);
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      // Prioritize items with stock > 0
+      if ((a.stock || 0) > 0 && (b.stock || 0) <= 0) return -1;
+      if ((a.stock || 0) <= 0 && (b.stock || 0) > 0) return 1;
+      return (b.stock || 0) - (a.stock || 0);
+    });
 
   // Toast / feedback message when quick adding products
   const [quickAddFeedback, setQuickAddFeedback] = useState<string | null>(null);

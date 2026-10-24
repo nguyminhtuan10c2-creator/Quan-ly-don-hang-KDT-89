@@ -41,7 +41,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // Metrics calculation
   const totalOrders = orders.length;
   const pendingDeliveries = orders.filter((o) => o.status === 'pending' || o.status === 'delivering').length;
-  const lowStockProducts = products.filter((p) => p.stock <= (p.minStockAlert || 5));
+  // Strictly only products that have abundant stock (> 5 units)
+  const inStockProducts = products.filter((p) => (p.stock || 0) > 5);
   const totalWarrantyBonus = bonusSummaries.reduce((acc, curr) => acc + curr.totalBonusEarned, 0);
 
   // Revenue & Debt calculations
@@ -175,7 +176,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Pending Deliveries */}
         <div
-          onClick={() => onNavigate('orders')}
+          onClick={() => onNavigate('delivery-schedule')}
           className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between">
@@ -195,28 +196,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-        {/* Low Stock Alerts */}
+        {/* In-Stock Ample Products Card */}
         <div
           onClick={() => onNavigate('inventory')}
-          className={`bg-white p-5 rounded-2xl border transition-all cursor-pointer group ${
-            lowStockProducts.length > 0
-              ? 'border-rose-300 ring-2 ring-rose-100 bg-rose-50/30'
-              : 'border-slate-200 shadow-xs'
-          }`}
+          className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-bold text-rose-600 uppercase tracking-wider">Cảnh báo sắp hết hàng</p>
-              <h3 className="text-2xl font-extrabold text-slate-900 mt-1">{lowStockProducts.length}</h3>
+              <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Hàng có sẵn dồi dào</p>
+              <h3 className="text-2xl font-extrabold text-slate-900 mt-1">{inStockProducts.length}</h3>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-colors">
-              <AlertTriangle className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              <PackageCheck className="w-6 h-6" />
             </div>
           </div>
           <div className="mt-4 flex items-center justify-between text-xs text-slate-500 border-t border-slate-100 pt-3">
-            <span>Sản phẩm Tồn kho ≤ 5</span>
-            <span className="text-rose-600 font-bold flex items-center group-hover:translate-x-1 transition-transform">
-              Nhập thêm kho <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+            <span>Sản phẩm tồn kho an toàn (&gt; 5 cái)</span>
+            <span className="text-emerald-600 font-bold flex items-center group-hover:translate-x-1 transition-transform">
+              Xem kho hàng <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
             </span>
           </div>
         </div>
@@ -248,37 +245,64 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column (2 cols): Recent Orders & Low stock list */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Low Stock Warning Banner if any */}
-          {lowStockProducts.length > 0 && (
-            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-5 shadow-xs">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center space-x-2 text-rose-800 font-bold text-sm">
-                  <AlertTriangle className="w-5 h-5 text-rose-600" />
-                  <span>Sản phẩm trong kho sắp hết hàng ({lowStockProducts.length})</span>
+          {/* In-Stock Ample Products Showcase (Only stock > 5, NO out-of-stock or low-stock items) */}
+          {inStockProducts.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-3">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center space-x-2">
+                  <PackageCheck className="w-5 h-5 text-emerald-600" />
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-sm">
+                      Sản phẩm dồi dào sẵn sàng bán ({inStockProducts.length} mặt hàng)
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Chỉ hiển thị các sản phẩm còn nhiều hàng trong kho (&gt; 5 cái), sẵn sàng lên đơn giao ngay
+                    </p>
+                  </div>
                 </div>
                 <button
-                  onClick={() => onNavigate('inventory')}
-                  className="text-xs font-bold text-rose-700 hover:text-rose-900 underline"
+                  onClick={() => onNavigate('create-order')}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center space-x-1 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl border border-blue-200 transition-colors"
                 >
-                  Đến trang Kho hàng
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Lên đơn ngay</span>
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {lowStockProducts.map((p) => (
-                  <div key={p.id} className="bg-white p-3 rounded-xl border border-rose-200 flex items-center justify-between text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {inStockProducts.slice(0, 6).map((p) => (
+                  <div
+                    key={p.id}
+                    className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-emerald-300 hover:shadow-xs transition-all flex flex-col justify-between space-y-2 group"
+                  >
                     <div>
-                      <p className="font-bold text-slate-900 truncate max-w-[180px]">{p.name}</p>
-                      <p className="text-[11px] text-slate-500">
-                        Mã SKU: <span className="font-mono">{p.sku}</span> • Giá: <strong className="text-slate-800">{formatVND(p.price)}</strong>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                          {p.category}
+                        </span>
+                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                          Còn {p.stock} cái
+                        </span>
+                      </div>
+                      <p className="font-bold text-slate-900 text-xs line-clamp-2 group-hover:text-blue-700 transition-colors">
+                        {p.name}
                       </p>
-                      <p className="text-[10px] text-indigo-600 font-medium">
-                        Cập nhật giá: {formatDateVI(p.priceUpdatedAt || p.createdAt)}
+                      <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                        SKU: {p.sku} • {p.brand}
                       </p>
                     </div>
-                    <span className="bg-rose-100 text-rose-800 font-black px-2.5 py-1 rounded-lg border border-rose-300">
-                      Còn {p.stock} {p.stock === 0 ? 'HẾT' : 'cái'}
-                    </span>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <span className="font-extrabold text-sm text-slate-900">
+                        {formatVND(p.price)}
+                      </span>
+                      <button
+                        onClick={() => onNavigate('create-order')}
+                        className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200 transition-colors"
+                      >
+                        Bán ngay →
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

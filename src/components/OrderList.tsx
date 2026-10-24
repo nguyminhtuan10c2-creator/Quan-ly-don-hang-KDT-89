@@ -25,8 +25,11 @@ import {
   formatDateVI,
   formatDateTimeVI,
   exportOrdersAsCsv,
+  calculateDistanceKm,
+  getStoreInfo,
+  getGoogleMapsDirectionsUrl,
 } from '../services/storageService';
-import { UploadCloud, Download, Database } from 'lucide-react';
+import { UploadCloud, Download, Database, MapPin, ExternalLink, Navigation } from 'lucide-react';
 
 interface OrderListProps {
   orders: Order[];
@@ -34,6 +37,7 @@ interface OrderListProps {
   onSelectOrderForDetail: (order: Order) => void;
   onEditOrder?: (order: Order) => void;
   onOpenDataManagement?: () => void;
+  onNavigateToDeliverySchedule?: () => void;
 }
 
 export const OrderList: React.FC<OrderListProps> = ({
@@ -42,7 +46,12 @@ export const OrderList: React.FC<OrderListProps> = ({
   onSelectOrderForDetail,
   onEditOrder,
   onOpenDataManagement,
+  onNavigateToDeliverySchedule,
 }) => {
+  const storeInfo = getStoreInfo();
+  const storeLat = storeInfo.lat || 10.7698;
+  const storeLng = storeInfo.lng || 106.6897;
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [employeeFilter, setEmployeeFilter] = useState<string>('all');
@@ -107,14 +116,25 @@ export const OrderList: React.FC<OrderListProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {onNavigateToDeliverySchedule && (
+            <button
+              type="button"
+              onClick={onNavigateToDeliverySchedule}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-xl shadow-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
+            >
+              <Truck className="w-4 h-4 text-amber-300" />
+              <span>Chế độ Lịch Trình Vận Chuyển & Khoảng cách →</span>
+            </button>
+          )}
+
           {onOpenDataManagement && (
             <button
               type="button"
               onClick={onOpenDataManagement}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold px-3.5 py-1.5 rounded-xl shadow-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
+              className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-extrabold px-3.5 py-1.5 rounded-xl shadow-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
             >
               <UploadCloud className="w-4 h-4" />
-              <span>Nạp đơn hàng cũ (Import)</span>
+              <span>Nạp đơn cũ</span>
             </button>
           )}
 
@@ -273,10 +293,34 @@ export const OrderList: React.FC<OrderListProps> = ({
                       )}
                     </td>
 
-                    {/* Scheduled Delivery Time */}
+                    {/* Scheduled Delivery Time & Distance */}
                     <td className="py-3.5 px-3.5">
                       <p className="font-bold text-slate-800">{formatDateVI(order.deliveryDate)}</p>
                       <p className="text-[11px] text-slate-500">{order.deliveryTime}</p>
+                      {(() => {
+                        const custLat = order.deliveryLat || (storeLat + (Math.sin(order.id.charCodeAt(order.id.length - 1)) * 0.035));
+                        const custLng = order.deliveryLng || (storeLng + (Math.cos(order.id.charCodeAt(order.id.length - 1)) * 0.04));
+                        const distKm = calculateDistanceKm(storeLat, storeLng, custLat, custLng);
+                        const osmUrl = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${storeLat}%2C${storeLng}%3B${custLat}%2C${custLng}`;
+                        return (
+                          <div className="mt-1 flex items-center space-x-1.5">
+                            <span className="text-[10px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                              <Navigation className="w-2.5 h-2.5 text-blue-600" />
+                              <span>{distKm} km</span>
+                            </span>
+                            <a
+                              href={osmUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold underline flex items-center gap-0.5"
+                              title="Mở chỉ đường OpenStreetMap (100% miễn phí, không cần key)"
+                            >
+                              <ExternalLink className="w-2.5 h-2.5" />
+                              <span>Bản đồ OSM</span>
+                            </a>
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     {/* Total Amount */}

@@ -82,19 +82,19 @@ export interface DeliveryTrackingMapProps {
   customerLng?: number;
 }
 
-// Map Tile Layers
+// Map Tile Layers (100% Free - NO API KEY REQUIRED)
 const TILE_LAYERS = {
-  carto: {
-    name: 'Đường phố (CartoDB)',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    subdomains: 'abcd',
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a>, &copy; OpenStreetMap',
-  },
   osm: {
     name: 'OpenStreetMap',
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     subdomains: 'abc',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  },
+  esriStreet: {
+    name: 'Đường phố (Esri)',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    subdomains: '',
+    attribution: '&copy; Esri, DeLorme, NAVTEQ, USGS',
   },
   satellite: {
     name: 'Ảnh Vệ Tinh (Esri)',
@@ -227,7 +227,7 @@ const InnerMapComponent: React.FC<DeliveryTrackingMapProps> = ({
   customerLng: propCustomerLng,
 }) => {
   const mapInstanceRef = useRef<L.Map | null>(null);
-  const [tileSource, setTileSource] = useState<'carto' | 'osm' | 'satellite'>('carto');
+  const [tileSource, setTileSource] = useState<'osm' | 'esriStreet' | 'satellite'>('osm');
   const [mapError, setMapError] = useState<boolean>(false);
 
   const storeInfo = propStoreInfo || getStoreInfo();
@@ -299,7 +299,7 @@ const InnerMapComponent: React.FC<DeliveryTrackingMapProps> = ({
         <div className="flex items-center space-x-2">
           <Navigation className="w-4 h-4 text-blue-400 animate-pulse" />
           <span className="font-extrabold text-xs tracking-wide uppercase text-slate-200">
-            Bản Đồ Giao Hàng (Leaflet GPS)
+            Bản Đồ Giao Hàng (OpenStreetMap / Leaflet)
           </span>
         </div>
 
@@ -308,21 +308,21 @@ const InnerMapComponent: React.FC<DeliveryTrackingMapProps> = ({
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[10px]">
             <button
               type="button"
-              onClick={() => setTileSource('carto')}
-              className={`px-2 py-0.5 rounded font-medium transition-all ${
-                tileSource === 'carto' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Đường phố
-            </button>
-            <button
-              type="button"
               onClick={() => setTileSource('osm')}
               className={`px-2 py-0.5 rounded font-medium transition-all ${
                 tileSource === 'osm' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-white'
               }`}
             >
-              OSM
+              OpenStreetMap
+            </button>
+            <button
+              type="button"
+              onClick={() => setTileSource('esriStreet')}
+              className={`px-2 py-0.5 rounded font-medium transition-all ${
+                tileSource === 'esriStreet' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Đường phố
             </button>
             <button
               type="button"
@@ -382,12 +382,12 @@ const InnerMapComponent: React.FC<DeliveryTrackingMapProps> = ({
         </div>
 
         <a
-          href={`https://www.google.com/maps/dir/?api=1&origin=${safeStoreLat},${safeStoreLng}&destination=${safeCustomerLat},${safeCustomerLng}`}
+          href={`https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${safeStoreLat}%2C${safeStoreLng}%3B${safeCustomerLat}%2C${safeCustomerLng}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[10px] font-bold text-blue-400 hover:text-blue-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center space-x-1 transition-colors"
+          className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center space-x-1 transition-colors"
         >
-          <span>Mở Google Maps</span>
+          <span>Chỉ đường OpenStreetMap</span>
           <ExternalLink className="w-3 h-3 ml-0.5" />
         </a>
       </div>
@@ -399,7 +399,7 @@ const InnerMapComponent: React.FC<DeliveryTrackingMapProps> = ({
             <AlertTriangle className="w-10 h-10 text-amber-400 mb-2" />
             <h5 className="font-bold text-slate-200 text-sm">Không thể tải khung bản đồ trực tuyến</h5>
             <p className="text-slate-400 text-xs mt-1 max-w-md">
-              Có thể do kết nối mạng hoặc tường lửa chặn tải bản đồ vệ tinh. Bạn có thể mở trực tiếp bằng Google Maps hoặc chuyển qua chế độ Mô phỏng lộ trình.
+              Có thể do kết nối mạng chậm. Bạn có thể mở trực tiếp bằng OpenStreetMap hoặc thử tải lại.
             </p>
             <div className="mt-3 flex space-x-2">
               <button
@@ -411,12 +411,12 @@ const InnerMapComponent: React.FC<DeliveryTrackingMapProps> = ({
                 <span>Thử tải lại</span>
               </button>
               <a
-                href={`https://www.google.com/maps/dir/?api=1&origin=${safeStoreLat},${safeStoreLng}&destination=${safeCustomerLat},${safeCustomerLng}`}
+                href={`https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${safeStoreLat}%2C${safeStoreLng}%3B${safeCustomerLat}%2C${safeCustomerLng}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg flex items-center space-x-1"
               >
-                <span>Xem trên Google Maps</span>
+                <span>Mở OpenStreetMap</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>

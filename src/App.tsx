@@ -22,6 +22,7 @@ import { DebtManagement } from './components/DebtManagement';
 import { DeliverySlip } from './components/DeliverySlip';
 import { OrderDetailModal } from './components/OrderDetailModal';
 import { DataManagementModal } from './components/DataManagementModal';
+import { DeliverySchedule } from './components/DeliverySchedule';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -163,6 +164,15 @@ export default function App() {
             onSelectOrderForDetail={(order) => setSelectedOrderForDetail(order)}
             onEditOrder={handleStartEditOrder}
             onOpenDataManagement={() => setIsDataModalOpen(true)}
+            onNavigateToDeliverySchedule={() => setActiveTab('delivery-schedule')}
+          />
+        )}
+
+        {activeTab === 'delivery-schedule' && (
+          <DeliverySchedule
+            orders={orders}
+            onSelectOrderForSlip={(order) => setSelectedOrderForSlip(order)}
+            onSelectOrderForDetail={(order) => setSelectedOrderForDetail(order)}
           />
         )}
 

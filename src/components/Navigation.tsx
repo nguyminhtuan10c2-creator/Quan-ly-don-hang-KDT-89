@@ -8,6 +8,7 @@ import {
   FolderTree,
   TrendingUp,
   CreditCard,
+  Truck,
 } from 'lucide-react';
 
 interface NavigationProps {
@@ -33,6 +34,25 @@ export const Navigation: React.FC<NavigationProps> = ({
       badge: null,
     },
     {
+      id: 'delivery-schedule',
+      label: 'Lịch giao & Shipper',
+      icon: Truck,
+      badge: pendingCount > 0 ? `${pendingCount} giao` : null,
+      badgeBg: 'bg-blue-100 text-blue-800 border-blue-300',
+    },
+    {
+      id: 'orders',
+      label: 'Đơn hàng',
+      icon: ClipboardList,
+      badge: null,
+    },
+    {
+      id: 'create-order',
+      label: 'Lên đơn mới',
+      icon: ShoppingCart,
+      highlight: true,
+    },
+    {
       id: 'revenue-report',
       label: 'Báo cáo doanh thu',
       icon: TrendingUp,
@@ -47,24 +67,10 @@ export const Navigation: React.FC<NavigationProps> = ({
       badgeBg: 'bg-amber-100 text-amber-800 border-amber-300',
     },
     {
-      id: 'orders',
-      label: 'Đơn hàng',
-      icon: ClipboardList,
-      badge: pendingCount > 0 ? `${pendingCount} chờ` : null,
-      badgeBg: 'bg-blue-100 text-blue-800 border-blue-300',
-    },
-    {
-      id: 'create-order',
-      label: 'Lên đơn mới',
-      icon: ShoppingCart,
-      highlight: true,
-    },
-    {
       id: 'inventory',
       label: 'Kho hàng',
       icon: Warehouse,
-      badge: lowStockCount > 0 ? `${lowStockCount} cảnh báo` : null,
-      badgeBg: 'bg-amber-100 text-amber-800 border-amber-300',
+      badge: null,
     },
     {
       id: 'master-data',
