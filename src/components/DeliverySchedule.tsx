@@ -58,6 +58,11 @@ import {
   fetchRealRoadRoute,
   RealRoadRoute,
 } from '../services/storageService';
+import {
+  isCoordinateInVietnam,
+  DEFAULT_VIETNAM_COORDS,
+  geocodeVietnamAddress,
+} from '../services/geocodingService';
 
 // Fix Leaflet icons
 try {
@@ -178,13 +183,19 @@ function MultiStopMapRecenter({
       return;
     }
 
-    const points: [number, number][] = [storePos];
-    if (shipperPos && Number.isFinite(shipperPos[0]) && Number.isFinite(shipperPos[1])) {
+    const points: [number, number][] = [];
+    if (isCoordinateInVietnam(storePos[0], storePos[1])) {
+      points.push(storePos);
+    } else {
+      points.push([DEFAULT_VIETNAM_COORDS.hcmc.lat, DEFAULT_VIETNAM_COORDS.hcmc.lng]);
+    }
+
+    if (shipperPos && isCoordinateInVietnam(shipperPos[0], shipperPos[1])) {
       points.push(shipperPos);
     }
 
     stops.forEach((s) => {
-      if (Number.isFinite(s.pos[0]) && Number.isFinite(s.pos[1])) {
+      if (Number.isFinite(s.pos[0]) && Number.isFinite(s.pos[1]) && isCoordinateInVietnam(s.pos[0], s.pos[1])) {
         points.push(s.pos);
       }
     });
@@ -199,7 +210,7 @@ function MultiStopMapRecenter({
         console.warn('fitBounds error', err);
       }
     } else {
-      map.setView(storePos, 13);
+      map.setView(points[0] || [DEFAULT_VIETNAM_COORDS.hcmc.lat, DEFAULT_VIETNAM_COORDS.hcmc.lng], 13);
     }
   }, [map, storePos, shipperPos, stops, selectedOrder, roadRouteCoords]);
 
@@ -317,9 +328,20 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
   // Calculate & enrich orders with distance and duration from active origin
   const enrichedOrders = useMemo(() => {
     return orders.map((order) => {
-      // Fallback destination coordinates if missing (distributed realistically around central HCMC)
-      const custLat = order.deliveryLat || (storeLat + (Math.sin(order.id.charCodeAt(order.id.length - 1)) * 0.035));
-      const custLng = order.deliveryLng || (storeLng + (Math.cos(order.id.charCodeAt(order.id.length - 1)) * 0.04));
+      let custLat = order.deliveryLat;
+      let custLng = order.deliveryLng;
+
+      // Auto-correct inverted coordinates or fallback safely within Vietnam
+      if (!isCoordinateInVietnam(custLat, custLng)) {
+        if (typeof custLat === 'number' && typeof custLng === 'number' && isCoordinateInVietnam(custLng, custLat)) {
+          const temp = custLat;
+          custLat = custLng;
+          custLng = temp;
+        } else {
+          custLat = storeLat + (Math.sin(order.id.charCodeAt(order.id.length - 1)) * 0.035);
+          custLng = storeLng + (Math.cos(order.id.charCodeAt(order.id.length - 1)) * 0.04);
+        }
+      }
 
       // Distance from current location (or store)
       const distanceKm = calculateDistanceKm(activeOriginPos[0], activeOriginPos[1], custLat, custLng);
@@ -1094,6 +1116,8 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
             <MapContainer
               center={activeOriginPos}
               zoom={13}
+              minZoom={5}
+              maxBounds={[[8.0, 102.0], [24.0, 110.0]]}
               scrollWheelZoom={true}
               style={{ width: '100%', height: '100%' }}
             >

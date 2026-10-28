@@ -301,7 +301,7 @@ export const OrderList: React.FC<OrderListProps> = ({
                         const custLat = order.deliveryLat || (storeLat + (Math.sin(order.id.charCodeAt(order.id.length - 1)) * 0.035));
                         const custLng = order.deliveryLng || (storeLng + (Math.cos(order.id.charCodeAt(order.id.length - 1)) * 0.04));
                         const distKm = calculateDistanceKm(storeLat, storeLng, custLat, custLng);
-                        const osmUrl = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${storeLat}%2C${storeLng}%3B${custLat}%2C${custLng}`;
+                        const mapUrl = `https://www.google.com/maps/dir/?api=1&origin=${storeLat},${storeLng}&destination=${custLat},${custLng}&travelmode=driving`;
                         return (
                           <div className="mt-1 flex items-center space-x-1.5">
                             <span className="text-[10px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded flex items-center gap-0.5">
@@ -309,14 +309,14 @@ export const OrderList: React.FC<OrderListProps> = ({
                               <span>{distKm} km</span>
                             </span>
                             <a
-                              href={osmUrl}
+                              href={mapUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold underline flex items-center gap-0.5"
-                              title="Mở chỉ đường OpenStreetMap (100% miễn phí, không cần key)"
+                              title="Mở chỉ đường Google Maps tại Việt Nam"
                             >
                               <ExternalLink className="w-2.5 h-2.5" />
-                              <span>Bản đồ OSM</span>
+                              <span>Chỉ đường</span>
                             </a>
                           </div>
                         );

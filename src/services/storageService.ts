@@ -169,7 +169,7 @@ export const getGoogleMapsDirectionsUrl = (
 };
 
 /**
- * Generate native OpenStreetMap / OSRM directions URL (100% Free, no API Key needed)
+ * Generate native OpenStreetMap directions URL (100% Free, worldwide coverage including Vietnam)
  */
 export const getOsmDirectionsUrl = (
   originLat: number,
@@ -177,7 +177,15 @@ export const getOsmDirectionsUrl = (
   destLat: number,
   destLng: number
 ): string => {
-  return `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${originLat}%2C${originLng}%3B${destLat}%2C${destLng}`;
+  // Use graphhopper_car which supports Vietnam routes globally (never fossgis_osrm_car which only covers Germany/Europe)
+  return `https://www.openstreetmap.org/directions?engine=graphhopper_car&route=${originLat}%2C${originLng}%3B${destLat}%2C${destLng}`;
+};
+
+/**
+ * Generate direct OpenStreetMap pin link centered at exact coordinates in Vietnam
+ */
+export const getOsmLocationUrl = (lat: number, lng: number): string => {
+  return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`;
 };
 
 export interface RoadStep {
@@ -802,14 +810,26 @@ export const createOrder = (orderData: Omit<Order, 'id' | 'orderCode' | 'created
     updatedBy: orderData.employeeId,
   };
 
+  let safeDeliveryLat = orderData.deliveryLat;
+  let safeDeliveryLng = orderData.deliveryLng;
+
+  // Auto-correct if lat & lng were inverted (Vietnam lat: ~8.5-23.4, lng: ~102.1-109.5)
+  if (typeof safeDeliveryLat === 'number' && typeof safeDeliveryLng === 'number') {
+    if (safeDeliveryLat > 50 && safeDeliveryLng < 30) {
+      const temp = safeDeliveryLat;
+      safeDeliveryLat = safeDeliveryLng;
+      safeDeliveryLng = temp;
+    }
+  }
+
   const newOrder: Order = {
     ...orderData,
     id: `ord-${Date.now()}`,
     orderCode,
     storeLat: orderData.storeLat || 10.7698,
     storeLng: orderData.storeLng || 106.6897,
-    deliveryLat: orderData.deliveryLat || 10.7825,
-    deliveryLng: orderData.deliveryLng || 10.7050,
+    deliveryLat: typeof safeDeliveryLat === 'number' && Number.isFinite(safeDeliveryLat) ? safeDeliveryLat : 10.7825,
+    deliveryLng: typeof safeDeliveryLng === 'number' && Number.isFinite(safeDeliveryLng) ? safeDeliveryLng : 106.7050,
     subtotal: itemsSubtotal,
     shippingFee,
     prepaidAmount,

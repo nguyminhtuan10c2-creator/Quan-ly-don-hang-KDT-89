@@ -4,6 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Order, StoreInfo } from '../types';
 import { getStoreInfo, getOrderStatusLabel } from '../services/storageService';
+import { isCoordinateInVietnam, DEFAULT_VIETNAM_COORDS } from '../services/geocodingService';
 import {
   Store,
   MapPin,
@@ -236,22 +237,45 @@ const InnerMapComponent: React.FC<DeliveryTrackingMapProps> = ({
   const storeLat = Number(
     propStorePos?.[0] ?? propStoreLat ?? order?.storeLat ?? storeInfo.lat ?? 10.7698
   );
-  const storeLng = Number(
+  const rawStoreLng = Number(
     propStorePos?.[1] ?? propStoreLng ?? order?.storeLng ?? storeInfo.lng ?? 106.6897
   );
-  const safeStoreLat = Number.isFinite(storeLat) ? storeLat : 10.7698;
-  const safeStoreLng = Number.isFinite(storeLng) ? storeLng : 106.6897;
+  let safeStoreLat = Number.isFinite(storeLat) ? storeLat : DEFAULT_VIETNAM_COORDS.hcmc.lat;
+  let safeStoreLng = Number.isFinite(rawStoreLng) ? rawStoreLng : DEFAULT_VIETNAM_COORDS.hcmc.lng;
+
+  // Auto-correct if lat & lng were inverted
+  if (!isCoordinateInVietnam(safeStoreLat, safeStoreLng)) {
+    if (isCoordinateInVietnam(safeStoreLng, safeStoreLat)) {
+      const temp = safeStoreLat;
+      safeStoreLat = safeStoreLng;
+      safeStoreLng = temp;
+    } else {
+      safeStoreLat = DEFAULT_VIETNAM_COORDS.hcmc.lat;
+      safeStoreLng = DEFAULT_VIETNAM_COORDS.hcmc.lng;
+    }
+  }
   const storePos: [number, number] = [safeStoreLat, safeStoreLng];
 
-  // Safely extract Customer coordinates with robust fallbacks
-  const customerLat = Number(
+  // Safely extract Customer coordinates with robust fallbacks in Vietnam
+  const rawCustomerLat = Number(
     propCustomerPos?.[0] ?? propCustomerLat ?? order?.deliveryLat ?? 10.7781
   );
-  const customerLng = Number(
+  const rawCustomerLng = Number(
     propCustomerPos?.[1] ?? propCustomerLng ?? order?.deliveryLng ?? 106.7015
   );
-  const safeCustomerLat = Number.isFinite(customerLat) ? customerLat : 10.7781;
-  const safeCustomerLng = Number.isFinite(customerLng) ? customerLng : 106.7015;
+  let safeCustomerLat = Number.isFinite(rawCustomerLat) ? rawCustomerLat : 10.7781;
+  let safeCustomerLng = Number.isFinite(rawCustomerLng) ? rawCustomerLng : 106.7015;
+
+  if (!isCoordinateInVietnam(safeCustomerLat, safeCustomerLng)) {
+    if (isCoordinateInVietnam(safeCustomerLng, safeCustomerLat)) {
+      const temp = safeCustomerLat;
+      safeCustomerLat = safeCustomerLng;
+      safeCustomerLng = temp;
+    } else {
+      safeCustomerLat = 10.7781;
+      safeCustomerLng = 106.7015;
+    }
+  }
   const customerPos: [number, number] = [safeCustomerLat, safeCustomerLng];
 
   // Center coordinate for map initialization
@@ -381,15 +405,30 @@ const InnerMapComponent: React.FC<DeliveryTrackingMapProps> = ({
           </div>
         </div>
 
-        <a
-          href={`https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${safeStoreLat}%2C${safeStoreLng}%3B${safeCustomerLat}%2C${safeCustomerLng}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center space-x-1 transition-colors"
-        >
-          <span>Chỉ đường OpenStreetMap</span>
-          <ExternalLink className="w-3 h-3 ml-0.5" />
-        </a>
+        <div className="flex items-center space-x-2">
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&origin=${safeStoreLat},${safeStoreLng}&destination=${safeCustomerLat},${safeCustomerLng}&travelmode=driving`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center space-x-1 transition-colors"
+            title="Dẫn đường xe máy / ô tô trên Google Maps"
+          >
+            <Navigation className="w-3 h-3 text-emerald-400" />
+            <span>Chỉ đường Google Maps</span>
+            <ExternalLink className="w-3 h-3 ml-0.5" />
+          </a>
+
+          <a
+            href={`https://www.openstreetmap.org/?mlat=${safeCustomerLat}&mlon=${safeCustomerLng}#map=16/${safeCustomerLat}/${safeCustomerLng}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] font-bold text-blue-400 hover:text-blue-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1 rounded-lg flex items-center space-x-1 transition-colors"
+            title="Xem vị trí khách hàng trên OpenStreetMap Việt Nam"
+          >
+            <span>Bản đồ OSM</span>
+            <ExternalLink className="w-3 h-3 ml-0.5" />
+          </a>
+        </div>
       </div>
 
       {/* 3. Map Container */}
@@ -399,7 +438,7 @@ const InnerMapComponent: React.FC<DeliveryTrackingMapProps> = ({
             <AlertTriangle className="w-10 h-10 text-amber-400 mb-2" />
             <h5 className="font-bold text-slate-200 text-sm">Không thể tải khung bản đồ trực tuyến</h5>
             <p className="text-slate-400 text-xs mt-1 max-w-md">
-              Có thể do kết nối mạng chậm. Bạn có thể mở trực tiếp bằng OpenStreetMap hoặc thử tải lại.
+              Có thể do kết nối mạng chậm. Bạn có thể mở trực tiếp bằng Google Maps hoặc thử tải lại.
             </p>
             <div className="mt-3 flex space-x-2">
               <button
@@ -411,12 +450,12 @@ const InnerMapComponent: React.FC<DeliveryTrackingMapProps> = ({
                 <span>Thử tải lại</span>
               </button>
               <a
-                href={`https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${safeStoreLat}%2C${safeStoreLng}%3B${safeCustomerLat}%2C${safeCustomerLng}`}
+                href={`https://www.google.com/maps/dir/?api=1&origin=${safeStoreLat},${safeStoreLng}&destination=${safeCustomerLat},${safeCustomerLng}&travelmode=driving`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg flex items-center space-x-1"
               >
-                <span>Mở OpenStreetMap</span>
+                <span>Mở Google Maps</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>
@@ -425,6 +464,8 @@ const InnerMapComponent: React.FC<DeliveryTrackingMapProps> = ({
           <MapContainer
             center={centerPos}
             zoom={13}
+            minZoom={5}
+            maxBounds={[[8.0, 102.0], [24.0, 110.0]]}
             scrollWheelZoom={false}
             className="w-full h-full z-0"
             style={{ height: '100%', width: '100%', minHeight: '320px' }}

@@ -46,6 +46,7 @@ import {
   getBrands,
   removeVietnameseTones,
 } from '../services/storageService';
+import { VietnamAddressMapPicker } from './VietnamAddressMapPicker';
 
 interface OrderFormProps {
   products: Product[];
@@ -84,6 +85,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   const [customerName, setCustomerName] = useState(editingOrder ? editingOrder.customerName : '');
   const [customerPhone, setCustomerPhone] = useState(editingOrder ? editingOrder.customerPhone : '');
   const [deliveryAddress, setDeliveryAddress] = useState(editingOrder ? editingOrder.deliveryAddress : '');
+  const [deliveryLat, setDeliveryLat] = useState<number | undefined>(editingOrder?.deliveryLat);
+  const [deliveryLng, setDeliveryLng] = useState<number | undefined>(editingOrder?.deliveryLng);
 
   // Delivery Scheduler & Staff Assignment
   const deliveryStaffList = staffList.filter((s) => s.role === 'Delivery');
@@ -598,6 +601,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
       deliveryAddress: deliveryAddress.trim(),
+      deliveryLat,
+      deliveryLng,
       employeeId: employeeId.trim().toUpperCase(),
       employeeName: employeeName.trim(),
       items: selectedItems,
@@ -627,6 +632,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
     setCustomerName('');
     setCustomerPhone('');
     setDeliveryAddress('');
+    setDeliveryLat(undefined);
+    setDeliveryLng(undefined);
     setSelectedItems([]);
     setNotes('');
   };
@@ -793,14 +800,15 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Địa chỉ giao hàng chi tiết *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="VD: Số 254 Nguyễn Văn Cừ, Phường Nguyễn Cư Trinh, Quận 1, TP.HCM"
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                    className="w-full text-xs px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  <VietnamAddressMapPicker
+                    address={deliveryAddress}
+                    onAddressChange={(newAddr) => setDeliveryAddress(newAddr)}
+                    lat={deliveryLat}
+                    lng={deliveryLng}
+                    onCoordinatesChange={(newLat, newLng) => {
+                      setDeliveryLat(newLat);
+                      setDeliveryLng(newLng);
+                    }}
                   />
                 </div>
               </div>
