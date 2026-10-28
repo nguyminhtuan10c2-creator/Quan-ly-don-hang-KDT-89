@@ -37,11 +37,14 @@ import {
   CornerUpRight,
   ChevronRight,
   Volume2,
+  Building2,
+  Plus,
+  Home,
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Order, OrderStatus, StoreInfo, Staff } from '../types';
+import { Order, OrderStatus, StoreInfo, Staff, DepartureLocation } from '../types';
 import {
   formatVND,
   formatDateVI,
@@ -57,12 +60,16 @@ import {
   optimizeDeliveryRouteSequence,
   fetchRealRoadRoute,
   RealRoadRoute,
+  getDepartureLocations,
+  getActiveDepartureLocation,
+  setActiveDepartureLocation,
 } from '../services/storageService';
 import {
   isCoordinateInVietnam,
   DEFAULT_VIETNAM_COORDS,
   geocodeVietnamAddress,
 } from '../services/geocodingService';
+import { DepartureLocationModal } from './DepartureLocationModal';
 
 // Fix Leaflet icons
 try {
@@ -232,8 +239,20 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
   const staffList = getStaff();
   const deliveryStaffList = staffList.filter((s) => s.role === 'Delivery');
 
-  const storeLat = storeInfo.lat || 10.7698;
-  const storeLng = storeInfo.lng || 106.6897;
+  // Departure Locations (Điểm xuất phát) State
+  const [departureLocations, setDepartureLocations] = useState<DepartureLocation[]>(getDepartureLocations());
+  const initialActiveDeparture = getActiveDepartureLocation();
+  const [selectedDepartureId, setSelectedDepartureId] = useState<string>(initialActiveDeparture.id);
+  const [isDepartureModalOpen, setIsDepartureModalOpen] = useState<boolean>(false);
+  const [departureModalMode, setDepartureModalMode] = useState<'add' | 'manage'>('add');
+
+  const activeDeparture = useMemo(() => {
+    const found = departureLocations.find((l) => l.id === selectedDepartureId);
+    return found || departureLocations[0] || initialActiveDeparture;
+  }, [departureLocations, selectedDepartureId, initialActiveDeparture]);
+
+  const storeLat = activeDeparture.lat || 10.7418;
+  const storeLng = activeDeparture.lng || 106.6722;
   const storePos: [number, number] = [storeLat, storeLng];
 
   // Shipper GPS Location State
@@ -297,6 +316,7 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
           accuracy: Math.round(accuracy),
           locatedAt: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         });
+        setSelectedDepartureId('shipper_gps');
         setIsLocating(false);
         setLocationNotice(`Đã định vị vị trí của bạn (Sai số ~${Math.round(accuracy)}m). Lộ trình đã được tối ưu từ vị trí này!`);
         setTimeout(() => setLocationNotice(null), 5000);
@@ -317,13 +337,27 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
     );
   };
 
-  // Origin point for routing: Shipper's live GPS if available, otherwise warehouse
+  // Origin point for routing: Shipper's live GPS if selected, otherwise chosen departure location
   const activeOriginPos: [number, number] = useMemo(() => {
-    if (shipperLocation && Number.isFinite(shipperLocation.lat) && Number.isFinite(shipperLocation.lng)) {
+    if (selectedDepartureId === 'shipper_gps' && shipperLocation && Number.isFinite(shipperLocation.lat) && Number.isFinite(shipperLocation.lng)) {
       return [shipperLocation.lat, shipperLocation.lng];
     }
-    return storePos;
-  }, [shipperLocation, storePos]);
+    return [activeDeparture.lat, activeDeparture.lng];
+  }, [selectedDepartureId, shipperLocation, activeDeparture]);
+
+  const activeOriginLabel = useMemo(() => {
+    if (selectedDepartureId === 'shipper_gps') {
+      return 'Vị trí của bạn (Shipper Live GPS)';
+    }
+    return activeDeparture.name;
+  }, [selectedDepartureId, activeDeparture]);
+
+  const activeOriginAddress = useMemo(() => {
+    if (selectedDepartureId === 'shipper_gps') {
+      return shipperLocation ? `Tọa độ GPS: ${shipperLocation.lat.toFixed(5)}, ${shipperLocation.lng.toFixed(5)}` : 'Đang định vị GPS...';
+    }
+    return activeDeparture.address;
+  }, [selectedDepartureId, shipperLocation, activeDeparture]);
 
   // Calculate & enrich orders with distance and duration from active origin
   const enrichedOrders = useMemo(() => {
@@ -642,6 +676,107 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
           </button>
         </div>
       )}
+
+      {/* Starting Location (Origin Point) & Route Setup Bar */}
+      <div className="bg-white p-5 rounded-2xl border-2 border-blue-500/30 shadow-md space-y-3 no-print">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center space-x-2">
+              <span className="bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center space-x-1">
+                <Building2 className="w-3 h-3" />
+                <span>Vị Trí Đầu (Điểm Xuất Phát)</span>
+              </span>
+              <span className="text-slate-400 text-xs hidden sm:inline">• Điểm bắt đầu tính quãng đường & dẫn đường</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              <span className="text-base sm:text-lg font-black text-slate-900 flex items-center space-x-1.5">
+                <span>{activeOriginLabel}</span>
+              </span>
+              {selectedDepartureId !== 'shipper_gps' && activeDeparture.isDefault && (
+                <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-300">
+                  Kho Mặc Định
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-600 flex items-center space-x-1 font-medium">
+              <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+              <span>{activeOriginAddress}</span>
+            </p>
+          </div>
+
+          {/* Quick Action Buttons for Departure Points */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDepartureModalMode('add');
+                setIsDepartureModalOpen(true);
+              }}
+              className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-black px-3.5 py-2 rounded-xl transition-all shadow-xs flex items-center space-x-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Thêm địa điểm xuất phát</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDepartureModalMode('manage');
+                setIsDepartureModalOpen(true);
+              }}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center space-x-1.5"
+            >
+              <Building2 className="w-3.5 h-3.5 text-blue-600" />
+              <span>Quản lý điểm ({departureLocations.length})</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Departure Point Switcher Pills */}
+        <div className="pt-2 border-t border-slate-100 flex items-center space-x-2 overflow-x-auto pb-1 text-xs">
+          <span className="text-[11px] font-bold text-slate-400 shrink-0 uppercase tracking-wider">
+            Chọn điểm xuất phát:
+          </span>
+          {departureLocations.map((loc) => (
+            <button
+              key={loc.id}
+              type="button"
+              onClick={() => {
+                setSelectedDepartureId(loc.id);
+                setActiveDepartureLocation(loc.id);
+              }}
+              className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 flex items-center space-x-1.5 border ${
+                selectedDepartureId === loc.id
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span className="truncate max-w-[190px]">{loc.name}</span>
+            </button>
+          ))}
+
+          {/* Shipper Live GPS Pill */}
+          <button
+            type="button"
+            onClick={() => {
+              if (!shipperLocation) {
+                handleDetectShipperLocation();
+              } else {
+                setSelectedDepartureId('shipper_gps');
+              }
+            }}
+            className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 flex items-center space-x-1.5 border ${
+              selectedDepartureId === 'shipper_gps'
+                ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                : 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-200'
+            }`}
+          >
+            <Navigation2 className="w-3.5 h-3.5" />
+            <span>Vị trí của tôi (GPS)</span>
+          </button>
+        </div>
+      </div>
 
       {/* KPI Overview Cards for Delivery Team */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -1147,13 +1282,19 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
                 roadRouteCoords={realRoadRoute?.coordinates}
               />
 
-              {/* 1. Store Marker */}
-              <Marker position={storePos} icon={createStoreDivIcon(storeInfo.name)}>
+              {/* 1. Departure Origin Marker */}
+              <Marker position={activeOriginPos} icon={createStoreDivIcon(activeOriginLabel)}>
                 <Popup>
                   <div className="p-2 space-y-1 text-xs">
-                    <p className="font-black text-blue-900">{storeInfo.name}</p>
-                    <p className="text-[11px] text-slate-600">{storeInfo.address}</p>
-                    <p className="text-[11px] text-blue-700 font-bold">Kho xuất phát hàng hóa</p>
+                    <p className="font-black text-blue-900 flex items-center space-x-1">
+                      <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                      <span>{activeOriginLabel}</span>
+                    </p>
+                    <p className="text-[11px] text-slate-600">{activeOriginAddress}</p>
+                    <p className="text-[11px] text-blue-700 font-bold">📍 Vị trí đầu xuất phát của chuyến đi</p>
+                    <p className="text-[10px] text-slate-500 font-mono">
+                      GPS: {activeOriginPos[0].toFixed(5)}, {activeOriginPos[1].toFixed(5)}
+                    </p>
                   </div>
                 </Popup>
               </Marker>
@@ -1734,6 +1875,21 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal: Add & Manage Departure Locations */}
+      <DepartureLocationModal
+        isOpen={isDepartureModalOpen}
+        onClose={() => setIsDepartureModalOpen(false)}
+        initialMode={departureModalMode}
+        onLocationsUpdated={(list) => {
+          setDepartureLocations(list);
+        }}
+        onLocationSelected={(loc) => {
+          setSelectedDepartureId(loc.id);
+          setActiveDepartureLocation(loc.id);
+          setIsDepartureModalOpen(false);
+        }}
+      />
     </div>
   );
 };

@@ -62,6 +62,13 @@ service cloud.firestore {
         && data.address is string && data.address.size() <= 512;
     }
 
+    function isValidDepartureLocation(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 256
+        && data.address is string && data.address.size() > 0 && data.address.size() <= 512
+        && data.lat is number && data.lng is number;
+    }
+
     // ----------------------------------------------------
     // Collection Match Blocks
     // ----------------------------------------------------
@@ -91,6 +98,13 @@ service cloud.firestore {
       allow read: if isValidId(docId);
       allow create, update: if isValidId(docId) && isValidStoreInfo(incoming());
       allow delete: if false;
+    }
+
+    match /departureLocations/{departureId} {
+      allow read: if isValidId(departureId);
+      allow create: if isValidId(departureId) && isValidDepartureLocation(incoming());
+      allow update: if isValidId(departureId) && isValidDepartureLocation(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(departureId);
     }
 
     // Connection testing endpoint

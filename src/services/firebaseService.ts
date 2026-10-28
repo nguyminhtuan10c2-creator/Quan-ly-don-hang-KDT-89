@@ -8,12 +8,13 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { Order, Product, Staff, StoreInfo } from '../types';
+import { Order, Product, Staff, StoreInfo, DepartureLocation } from '../types';
 import {
   getOrders,
   getProducts,
   getStaffList,
   getStoreInfo,
+  getDepartureLocations,
   saveOrders,
   saveProducts,
   saveStaffList,
@@ -78,14 +79,34 @@ export async function syncAllToFirebase(): Promise<{ success: boolean; count: nu
         bankAccount: store.bankAccount || '',
         bankName: store.bankName || '',
         bankOwner: store.bankOwner || '',
-        lat: store.lat || 10.7769,
-        lng: store.lng || 106.7009,
+        lat: store.lat || 10.7418,
+        lng: store.lng || 106.6722,
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'storeSettings/info');
     }
 
-    // 2. Sync Orders
+    // 2. Sync Departure Locations (Kho hàng & Điểm xuất phát)
+    const departureLocations = getDepartureLocations();
+    for (const dep of departureLocations) {
+      try {
+        await setDoc(doc(db, 'departureLocations', dep.id), {
+          id: String(dep.id),
+          name: String(dep.name),
+          address: String(dep.address),
+          lat: Number(dep.lat || 10.7418),
+          lng: Number(dep.lng || 106.6722),
+          phone: String(dep.phone || ''),
+          isDefault: Boolean(dep.isDefault),
+          notes: String(dep.notes || ''),
+          createdAt: String(dep.createdAt || new Date().toISOString()),
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `departureLocations/${dep.id}`);
+      }
+    }
+
+    // 3. Sync Orders
     for (const order of orders) {
       const cleanOrder = {
         id: String(order.id),
@@ -95,6 +116,11 @@ export async function syncAllToFirebase(): Promise<{ success: boolean; count: nu
         deliveryAddress: String(order.deliveryAddress || ''),
         deliveryLat: typeof order.deliveryLat === 'number' ? order.deliveryLat : 0,
         deliveryLng: typeof order.deliveryLng === 'number' ? order.deliveryLng : 0,
+        storeLat: typeof order.storeLat === 'number' ? order.storeLat : 10.7418,
+        storeLng: typeof order.storeLng === 'number' ? order.storeLng : 106.6722,
+        departureLocationId: String(order.departureLocationId || ''),
+        departureLocationName: String(order.departureLocationName || ''),
+        departureAddress: String(order.departureAddress || ''),
         employeeId: String(order.employeeId || ''),
         employeeName: String(order.employeeName || ''),
         totalAmount: Number(order.totalAmount || 0),

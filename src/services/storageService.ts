@@ -12,8 +12,17 @@ import {
   PaymentLog,
   PriceChangeRecord,
   StockChangeRecord,
+  DepartureLocation,
 } from '../types';
-import { INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_STAFF, INITIAL_STORE_INFO, INITIAL_CATEGORIES, INITIAL_BRANDS } from '../data/initialData';
+import {
+  INITIAL_PRODUCTS,
+  INITIAL_ORDERS,
+  INITIAL_STAFF,
+  INITIAL_STORE_INFO,
+  INITIAL_DEPARTURE_LOCATIONS,
+  INITIAL_CATEGORIES,
+  INITIAL_BRANDS,
+} from '../data/initialData';
 
 export const getOrderStatusLabel = (status: OrderStatus): string => {
   switch (status) {
@@ -43,6 +52,8 @@ const STORAGE_KEYS = {
   ACTIVE_STAFF_ID: 'ordermanager_active_staff_id_v5',
   CATEGORIES: 'ordermanager_categories_v5',
   BRANDS: 'ordermanager_brands_v5',
+  DEPARTURE_LOCATIONS: 'ordermanager_departure_locations_v5',
+  ACTIVE_DEPARTURE_ID: 'ordermanager_active_departure_id_v5',
 };
 
 // Event listener mechanism for reactivity
@@ -749,8 +760,8 @@ export const getOrders = (): Order[] => {
               receivedBy: o.employeeName || 'Kế toán bán hàng',
             }
           ] : []),
-          storeLat: o.storeLat || 10.7698,
-          storeLng: o.storeLng || 106.6897,
+          storeLat: o.storeLat || 10.7418,
+          storeLng: o.storeLng || 106.6722,
           deliveryLat: o.deliveryLat || (10.775 + (idx % 6) * 0.006),
           deliveryLng: o.deliveryLng || (10.695 + (idx % 6) * 0.007),
         };
@@ -826,8 +837,8 @@ export const createOrder = (orderData: Omit<Order, 'id' | 'orderCode' | 'created
     ...orderData,
     id: `ord-${Date.now()}`,
     orderCode,
-    storeLat: orderData.storeLat || 10.7698,
-    storeLng: orderData.storeLng || 106.6897,
+    storeLat: orderData.storeLat || 10.7418,
+    storeLng: orderData.storeLng || 106.6722,
     deliveryLat: typeof safeDeliveryLat === 'number' && Number.isFinite(safeDeliveryLat) ? safeDeliveryLat : 10.7825,
     deliveryLng: typeof safeDeliveryLng === 'number' && Number.isFinite(safeDeliveryLng) ? safeDeliveryLng : 106.7050,
     subtotal: itemsSubtotal,
@@ -1029,10 +1040,22 @@ export const getStoreInfo = (): StoreInfo => {
     const data = localStorage.getItem(STORAGE_KEYS.STORE);
     if (data) {
       const parsed: StoreInfo = JSON.parse(data);
+      // Auto-migrate if stored address is still the old placeholder
+      if (!parsed.address || parsed.address.includes('188 Nguyễn Trãi')) {
+        const updated: StoreInfo = {
+          ...parsed,
+          name: 'KHO ĐIỆN MÁY KDT-89 (KHO HIỆP ÂN)',
+          address: '89 Đường Số 1, Khu Dân Cư Hiệp Ân, Phường 5, Quận 8, TP. Hồ Chí Minh',
+          lat: 10.7418,
+          lng: 106.6722,
+        };
+        localStorage.setItem(STORAGE_KEYS.STORE, JSON.stringify(updated));
+        return updated;
+      }
       return {
         ...parsed,
-        lat: parsed.lat || 10.7698,
-        lng: parsed.lng || 106.6897,
+        lat: parsed.lat || 10.7418,
+        lng: parsed.lng || 106.6722,
       };
     }
   } catch (e) {
@@ -1044,6 +1067,129 @@ export const getStoreInfo = (): StoreInfo => {
 
 export const updateStoreInfo = (info: StoreInfo) => {
   localStorage.setItem(STORAGE_KEYS.STORE, JSON.stringify(info));
+  notifyListeners();
+};
+
+// --- DEPARTURE LOCATIONS (ĐIỂM XUẤT PHÁT) ---
+export const getDepartureLocations = (): DepartureLocation[] => {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.DEPARTURE_LOCATIONS);
+    if (data) {
+      const parsed: DepartureLocation[] = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Ensure primary warehouse at Hiệp Ân Q8 is always present
+        const hasHiepAn = parsed.some(
+          (l) => l.address.toLowerCase().includes('hiệp ân') || l.address.toLowerCase().includes('quận 8')
+        );
+        if (!hasHiepAn) {
+          parsed.unshift(INITIAL_DEPARTURE_LOCATIONS[0]);
+          localStorage.setItem(STORAGE_KEYS.DEPARTURE_LOCATIONS, JSON.stringify(parsed));
+        }
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Error reading departure locations', e);
+  }
+  localStorage.setItem(STORAGE_KEYS.DEPARTURE_LOCATIONS, JSON.stringify(INITIAL_DEPARTURE_LOCATIONS));
+  return INITIAL_DEPARTURE_LOCATIONS;
+};
+
+export const getActiveDepartureLocation = (): DepartureLocation => {
+  const list = getDepartureLocations();
+  const activeId = localStorage.getItem(STORAGE_KEYS.ACTIVE_DEPARTURE_ID);
+  if (activeId) {
+    const found = list.find((l) => l.id === activeId);
+    if (found) return found;
+  }
+  const defaultLoc = list.find((l) => l.isDefault);
+  return defaultLoc || list[0] || INITIAL_DEPARTURE_LOCATIONS[0];
+};
+
+export const setActiveDepartureLocation = (id: string): void => {
+  localStorage.setItem(STORAGE_KEYS.ACTIVE_DEPARTURE_ID, id);
+  notifyListeners();
+};
+
+export const saveDepartureLocation = (
+  locData: Omit<DepartureLocation, 'id'> & { id?: string }
+): DepartureLocation => {
+  const list = getDepartureLocations();
+  let saved: DepartureLocation;
+  const now = new Date().toISOString();
+
+  if (locData.id) {
+    const index = list.findIndex((l) => l.id === locData.id);
+    if (index !== -1) {
+      saved = {
+        ...list[index],
+        ...locData,
+        id: locData.id,
+      };
+      if (locData.isDefault) {
+        list.forEach((l) => {
+          l.isDefault = l.id === locData.id;
+        });
+      }
+      list[index] = saved;
+    } else {
+      saved = {
+        ...locData,
+        id: locData.id,
+        createdAt: now,
+      };
+      if (locData.isDefault) {
+        list.forEach((l) => {
+          l.isDefault = false;
+        });
+      }
+      list.push(saved);
+    }
+  } else {
+    const newId = `dep-${Date.now()}`;
+    saved = {
+      ...locData,
+      id: newId,
+      createdAt: now,
+    };
+    if (locData.isDefault || list.length === 0) {
+      list.forEach((l) => {
+        l.isDefault = false;
+      });
+      saved.isDefault = true;
+    }
+    list.push(saved);
+  }
+
+  localStorage.setItem(STORAGE_KEYS.DEPARTURE_LOCATIONS, JSON.stringify(list));
+  notifyListeners();
+  return saved;
+};
+
+export const deleteDepartureLocation = (id: string): boolean => {
+  const list = getDepartureLocations();
+  if (list.length <= 1) {
+    // Keep at least 1 primary warehouse
+    return false;
+  }
+  const filtered = list.filter((l) => l.id !== id);
+  // If the deleted one was default, make the first one default
+  if (!filtered.some((l) => l.isDefault)) {
+    filtered[0].isDefault = true;
+  }
+  localStorage.setItem(STORAGE_KEYS.DEPARTURE_LOCATIONS, JSON.stringify(filtered));
+  notifyListeners();
+  return true;
+};
+
+export const setDefaultDepartureLocation = (id: string): void => {
+  const list = getDepartureLocations();
+  const updated = list.map((l) => ({
+    ...l,
+    isDefault: l.id === id,
+  }));
+  localStorage.setItem(STORAGE_KEYS.DEPARTURE_LOCATIONS, JSON.stringify(updated));
+  localStorage.setItem(STORAGE_KEYS.ACTIVE_DEPARTURE_ID, id);
   notifyListeners();
 };
 
@@ -1253,6 +1399,8 @@ export const resetToDemoData = () => {
   localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(INITIAL_ORDERS));
   localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(INITIAL_STAFF));
   localStorage.setItem(STORAGE_KEYS.STORE, JSON.stringify(INITIAL_STORE_INFO));
+  localStorage.setItem(STORAGE_KEYS.DEPARTURE_LOCATIONS, JSON.stringify(INITIAL_DEPARTURE_LOCATIONS));
+  localStorage.setItem(STORAGE_KEYS.ACTIVE_DEPARTURE_ID, INITIAL_DEPARTURE_LOCATIONS[0].id);
   localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
   localStorage.setItem(STORAGE_KEYS.BRANDS, JSON.stringify(INITIAL_BRANDS));
   localStorage.setItem(STORAGE_KEYS.ACTIVE_STAFF_ID, INITIAL_STAFF[0].id);

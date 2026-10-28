@@ -30,8 +30,9 @@ import {
   TrendingUp,
   ArrowRight,
   CornerDownLeft,
+  Building2,
 } from 'lucide-react';
-import { Product, OrderItem, OrderStatus, Order } from '../types';
+import { Product, OrderItem, OrderStatus, Order, DepartureLocation } from '../types';
 import {
   saveOrder,
   getActiveStaff,
@@ -45,8 +46,11 @@ import {
   getCategories,
   getBrands,
   removeVietnameseTones,
+  getDepartureLocations,
+  getActiveDepartureLocation,
 } from '../services/storageService';
 import { VietnamAddressMapPicker } from './VietnamAddressMapPicker';
+import { DepartureLocationModal } from './DepartureLocationModal';
 
 interface OrderFormProps {
   products: Product[];
@@ -80,6 +84,14 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   // Employee Creator Info
   const [employeeId, setEmployeeId] = useState(editingOrder ? editingOrder.employeeId : activeStaff.employeeId);
   const [employeeName, setEmployeeName] = useState(editingOrder ? editingOrder.employeeName : activeStaff.employeeName);
+
+  // Departure Locations (Vị trí đầu - Kho xuất phát)
+  const [departureLocations, setDepartureLocations] = useState<DepartureLocation[]>(getDepartureLocations());
+  const defaultDeparture = getActiveDepartureLocation();
+  const [selectedDepartureId, setSelectedDepartureId] = useState<string>(
+    editingOrder?.departureLocationId || defaultDeparture.id
+  );
+  const [isDepartureModalOpen, setIsDepartureModalOpen] = useState<boolean>(false);
 
   // Customer Info
   const [customerName, setCustomerName] = useState(editingOrder ? editingOrder.customerName : '');
@@ -594,6 +606,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       return;
     }
 
+    const activeDep = departureLocations.find((d) => d.id === selectedDepartureId) || defaultDeparture;
+
     // Save/Update Order & automatically recalculate stock & bonus
     const savedOrder = saveOrder({
       id: editingOrder ? editingOrder.id : undefined,
@@ -603,6 +617,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       deliveryAddress: deliveryAddress.trim(),
       deliveryLat,
       deliveryLng,
+      storeLat: activeDep.lat,
+      storeLng: activeDep.lng,
+      departureLocationId: activeDep.id,
+      departureLocationName: activeDep.name,
+      departureAddress: activeDep.address,
       employeeId: employeeId.trim().toUpperCase(),
       employeeName: employeeName.trim(),
       items: selectedItems,
@@ -767,11 +786,79 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               </div>
             </div>
 
-            {/* 2. Customer Info Section */}
+            {/* 2. Vị Trí Đầu: Điểm Xuất Phát (Kho Hàng) */}
+            <div className="bg-white p-5 rounded-2xl border-2 border-blue-500/20 shadow-xs space-y-3 relative z-0">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div className="flex items-center space-x-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+                    <Building2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-sm">2. Vị Trí Đầu: Điểm Xuất Phát (Kho Hàng)</h3>
+                    <p className="text-[11px] text-slate-500">Nơi lấy hàng xuất phát & tính cự ly vận chuyển</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDepartureModalOpen(true)}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl border border-blue-200 transition-colors flex items-center space-x-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Thêm / Quản lý điểm xuất phát</span>
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2">
+                  Chọn Kho / Điểm xuất phát hàng cho đơn này:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {departureLocations.map((loc) => {
+                    const isSelected = selectedDepartureId === loc.id;
+                    return (
+                      <div
+                        key={loc.id}
+                        onClick={() => setSelectedDepartureId(loc.id)}
+                        className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-blue-50/90 border-blue-500 shadow-2xs ring-2 ring-blue-500/30'
+                            : 'bg-slate-50/70 hover:bg-slate-100 border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-xs text-slate-900 flex items-center space-x-1.5">
+                            <span className={`w-2.5 h-2.5 rounded-full ${isSelected ? 'bg-blue-600 ring-2 ring-blue-200' : 'bg-slate-300'}`} />
+                            <span>{loc.name}</span>
+                          </span>
+                          {loc.isDefault && (
+                            <span className="text-[9px] font-black bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded border border-amber-300">
+                              Mặc định
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-600 mt-1 line-clamp-2">
+                          {loc.address}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-mono mt-1">
+                          GPS: {loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Vị Trí Cuối: Customer Info Section */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 relative z-0">
               <div className="flex items-center space-x-2 border-b border-slate-100 pb-3">
-                <User className="w-5 h-5 text-blue-600" />
-                <h3 className="font-extrabold text-slate-900 text-sm">2. Thông tin Khách hàng nhận hàng</h3>
+                <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
+                  <User className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-sm">3. Vị Trí Cuối: Khách Hàng & Điểm Giao Hàng</h3>
+                  <p className="text-[11px] text-slate-500">Định vị điểm đến của khách trên bản đồ Việt Nam</p>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2110,6 +2197,20 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal: Add & Manage Departure Locations */}
+      <DepartureLocationModal
+        isOpen={isDepartureModalOpen}
+        onClose={() => setIsDepartureModalOpen(false)}
+        initialMode="add"
+        onLocationsUpdated={(list) => {
+          setDepartureLocations(list);
+        }}
+        onLocationSelected={(loc) => {
+          setSelectedDepartureId(loc.id);
+          setIsDepartureModalOpen(false);
+        }}
+      />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { Product, Staff, Order, StoreInfo, CategoryItem, BrandItem } from '../types';
+import { Product, Staff, Order, StoreInfo, CategoryItem, BrandItem, DepartureLocation } from '../types';
 import { INVENTORY_REPORT_PRODUCTS } from './importedProducts';
 
 export const INITIAL_CATEGORIES: CategoryItem[] = [
@@ -25,14 +25,50 @@ export const INITIAL_BRANDS: BrandItem[] = [
 }));
 
 export const INITIAL_STORE_INFO: StoreInfo = {
-  name: 'KHO ĐIỆN MÁY KDT-89',
+  name: 'KHO ĐIỆN MÁY KDT-89 (KHO HIỆP ÂN)',
   phone: '1900 6868 - 0988.123.456',
-  address: 'Số 188 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP. Hồ Chí Minh',
+  address: '89 Đường Số 1, Khu Dân Cư Hiệp Ân, Phường 5, Quận 8, TP. Hồ Chí Minh',
   taxCode: '0312345678',
   website: 'www.dienmaykdt.vn',
-  lat: 10.7698,
-  lng: 106.6897,
+  lat: 10.7418,
+  lng: 106.6722,
 };
+
+export const INITIAL_DEPARTURE_LOCATIONS: DepartureLocation[] = [
+  {
+    id: 'dep-hiepan-q8',
+    name: 'Kho Chính - KDC Hiệp Ân (Quận 8)',
+    address: '89 Đường Số 1, Khu Dân Cư Hiệp Ân, Phường 5, Quận 8, TP. Hồ Chí Minh',
+    lat: 10.7418,
+    lng: 106.6722,
+    phone: '1900 6868 - 0988.123.456',
+    isDefault: true,
+    notes: 'Kho xuất hàng chính trung tâm điện máy KDT-89',
+    createdAt: '2026-10-01T08:00:00Z',
+  },
+  {
+    id: 'dep-center-q1',
+    name: 'Chi Nhánh Showroom Trung Tâm (Quận 1)',
+    address: 'Số 188 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP. Hồ Chí Minh',
+    lat: 10.7698,
+    lng: 106.6897,
+    phone: '0903.112.233',
+    isDefault: false,
+    notes: 'Showroom trưng bày & lấy hàng gấp trung tâm',
+    createdAt: '2026-10-01T08:00:00Z',
+  },
+  {
+    id: 'dep-hub-binhtan',
+    name: 'Tổng Kho Phụ & Trung Chuyển (Bình Tân)',
+    address: '150 Đường Số 7, Phường An Lạc A, Quận Bình Tân, TP. Hồ Chí Minh',
+    lat: 10.7516,
+    lng: 106.6115,
+    phone: '0909.888.777',
+    isDefault: false,
+    notes: 'Kho trung chuyển hàng cồng kềnh khu Tây',
+    createdAt: '2026-10-01T08:00:00Z',
+  },
+];
 
 export const INITIAL_STAFF: Staff[] = [
   {

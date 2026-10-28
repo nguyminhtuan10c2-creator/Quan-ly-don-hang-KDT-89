@@ -87,6 +87,23 @@
         "lng": { "type": "number" }
       },
       "required": ["name", "phone", "address"]
+    },
+    "DepartureLocation": {
+      "title": "DepartureLocation",
+      "description": "Warehouse and departure starting point locations for delivery routes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 256 },
+        "address": { "type": "string", "maxLength": 512 },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "phone": { "type": "string", "maxLength": 64 },
+        "isDefault": { "type": "boolean" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "name", "address", "lat", "lng"]
     }
   },
   "firestore": {
@@ -105,6 +122,10 @@
     "/storeSettings/info": {
       "schema": "StoreInfo",
       "description": "Store identity and configuration"
+    },
+    "/departureLocations/{departureId}": {
+      "schema": "DepartureLocation",
+      "description": "Store warehouses and starting point locations for vehicle route planning"
     }
   }
 }

@@ -125,7 +125,7 @@ export const DeliverySlip: React.FC<DeliverySlipProps> = ({ order, onClose }) =>
   // Editable Company Information
   const [customCompanyName, setCustomCompanyName] = useState<string>('CÔNG TY TNHH KDT-89');
   const [customCompanyAddress, setCustomCompanyAddress] = useState<string>(
-    'Số 89 - 91 Đường số 1, Khu Hiệp Ân, Phường Chánh Hưng, TPHCM'
+    '89 Đường Số 1, Khu Dân Cư Hiệp Ân, Phường 5, Quận 8, TP. Hồ Chí Minh'
   );
   const [customCompanyBank, setCustomCompanyBank] = useState<string>('STK: 220378 - Ngân hàng ACB - PGD Chánh Hưng');
   const [customNoticeText, setCustomNoticeText] = useState<string>(
@@ -134,7 +134,7 @@ export const DeliverySlip: React.FC<DeliverySlipProps> = ({ order, onClose }) =>
 
   // Editable Signatures
   const [signerShipper, setSignerShipper] = useState<string>(order.deliveryStaffName || '');
-  const [signerWarehouse, setSignerWarehouse] = useState<string>('KDT Kho Q1');
+  const [signerWarehouse, setSignerWarehouse] = useState<string>('KDT Kho Hiệp Ân Q8');
   const [signerAccountant, setSignerAccountant] = useState<string>('ACB-220378');
   const [signerReceiver, setSignerReceiver] = useState<string>(order.customerName || '');
 

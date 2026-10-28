@@ -99,6 +99,9 @@ export interface Order {
   deliveryLng?: number; // Kinh độ điểm giao hàng của khách
   storeLat?: number; // Vĩ độ kho/cửa hàng
   storeLng?: number; // Kinh độ kho/cửa hàng
+  departureLocationId?: string; // ID điểm xuất phát đã chọn
+  departureLocationName?: string; // Tên điểm xuất phát (Kho Chính, Chi nhánh...)
+  departureAddress?: string; // Địa chỉ điểm xuất phát
   employeeId: string; // Mã nhân viên (e.g. NV001)
   employeeName: string; // Tên nhân viên (e.g. Nguyễn Văn Minh)
   items: OrderItem[];
@@ -159,6 +162,18 @@ export interface EmployeeBonusSummary {
   totalBonusEarned: number; // VNĐ
 }
 
+export interface DepartureLocation {
+  id: string;
+  name: string; // e.g. "Kho Chính - KDC Hiệp Ân (Quận 8)"
+  address: string; // "89 Đường Số 1, Khu Dân Cư Hiệp Ân, Phường 5, Quận 8, TP. Hồ Chí Minh"
+  lat: number;
+  lng: number;
+  phone?: string;
+  isDefault?: boolean;
+  notes?: string;
+  createdAt?: string;
+}
+
 export interface StoreInfo {
   name: string;
   phone: string;
@@ -171,3 +186,4 @@ export interface StoreInfo {
   lat?: number;
   lng?: number;
 }
+
