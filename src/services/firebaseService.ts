@@ -4,17 +4,19 @@ import {
   setDoc,
   getDocs,
   getDoc,
+  deleteDoc,
   onSnapshot,
   writeBatch,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { Order, Product, Staff, StoreInfo, DepartureLocation } from '../types';
+import { Order, Product, Staff, StoreInfo, DepartureLocation, DeliveryTrip } from '../types';
 import {
   getOrders,
   getProducts,
   getStaffList,
   getStoreInfo,
   getDepartureLocations,
+  getDeliveryTrips,
   saveOrders,
   saveProducts,
   saveStaffList,
@@ -193,6 +195,39 @@ export async function syncAllToFirebase(): Promise<{ success: boolean; count: nu
       }
     }
 
+    // 5. Sync Delivery Trips
+    const trips = getDeliveryTrips();
+    for (const trip of trips) {
+      const cleanTrip = {
+        id: String(trip.id),
+        tripCode: String(trip.tripCode),
+        departureLocationId: String(trip.departureLocationId || ''),
+        departureLocationName: String(trip.departureLocationName || ''),
+        departureAddress: String(trip.departureAddress || ''),
+        departureLat: Number(trip.departureLat || 10.7418),
+        departureLng: Number(trip.departureLng || 106.6722),
+        shipperId: String(trip.shipperId || ''),
+        shipperName: String(trip.shipperName || ''),
+        shipperPhone: String(trip.shipperPhone || ''),
+        orderIds: Array.isArray(trip.orderIds) ? trip.orderIds : [],
+        status: trip.status || 'planning',
+        totalDistanceKm: Number(trip.totalDistanceKm || 0),
+        totalDurationMins: Number(trip.totalDurationMins || 0),
+        totalCodAmount: Number(trip.totalCodAmount || 0),
+        totalItemsCount: Number(trip.totalItemsCount || 0),
+        notes: String(trip.notes || ''),
+        createdAt: String(trip.createdAt || new Date().toISOString()),
+        startedAt: String(trip.startedAt || ''),
+        completedAt: String(trip.completedAt || ''),
+      };
+
+      try {
+        await setDoc(doc(db, 'deliveryTrips', cleanTrip.id), cleanTrip);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `deliveryTrips/${cleanTrip.id}`);
+      }
+    }
+
     const now = new Date().toLocaleString('vi-VN');
     localStorage.setItem('kdt89_firebase_last_sync', now);
     syncStatus.isConnected = true;
@@ -268,3 +303,30 @@ export async function pullFromFirebase(): Promise<{ success: boolean; ordersCoun
     throw error;
   }
 }
+
+/**
+ * Delete a delivery trip from Firestore
+ */
+export async function deleteTripFromFirebase(tripId: string): Promise<boolean> {
+  try {
+    await deleteDoc(doc(db, 'deliveryTrips', tripId));
+    return true;
+  } catch (err) {
+    console.warn('Could not delete trip from Firebase Firestore:', err);
+    return false;
+  }
+}
+
+/**
+ * Delete an order from Firestore
+ */
+export async function deleteOrderFromFirebase(orderId: string): Promise<boolean> {
+  try {
+    await deleteDoc(doc(db, 'orders', orderId));
+    return true;
+  } catch (err) {
+    console.warn('Could not delete order from Firebase Firestore:', err);
+    return false;
+  }
+}
+

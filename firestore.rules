@@ -69,6 +69,14 @@ service cloud.firestore {
         && data.lat is number && data.lng is number;
     }
 
+    function isValidDeliveryTrip(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.tripCode is string && data.tripCode.size() > 0 && data.tripCode.size() <= 64
+        && data.departureLocationName is string && data.departureLocationName.size() <= 256
+        && data.departureAddress is string && data.departureAddress.size() <= 512
+        && data.status in ['planning', 'in_transit', 'completed', 'cancelled'];
+    }
+
     // ----------------------------------------------------
     // Collection Match Blocks
     // ----------------------------------------------------
@@ -105,6 +113,13 @@ service cloud.firestore {
       allow create: if isValidId(departureId) && isValidDepartureLocation(incoming());
       allow update: if isValidId(departureId) && isValidDepartureLocation(incoming()) && incoming().id == existing().id;
       allow delete: if isValidId(departureId);
+    }
+
+    match /deliveryTrips/{tripId} {
+      allow read: if isValidId(tripId);
+      allow create: if isValidId(tripId) && isValidDeliveryTrip(incoming());
+      allow update: if isValidId(tripId) && isValidDeliveryTrip(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(tripId);
     }
 
     // Connection testing endpoint

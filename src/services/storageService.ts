@@ -13,6 +13,7 @@ import {
   PriceChangeRecord,
   StockChangeRecord,
   DepartureLocation,
+  DeliveryTrip,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -23,6 +24,7 @@ import {
   INITIAL_CATEGORIES,
   INITIAL_BRANDS,
 } from '../data/initialData';
+import { resolveCoordinatesFromAddress, isCoordinateInVietnam } from './geocodingService';
 
 export const getOrderStatusLabel = (status: OrderStatus): string => {
   switch (status) {
@@ -54,6 +56,7 @@ const STORAGE_KEYS = {
   BRANDS: 'ordermanager_brands_v5',
   DEPARTURE_LOCATIONS: 'ordermanager_departure_locations_v5',
   ACTIVE_DEPARTURE_ID: 'ordermanager_active_departure_id_v5',
+  DELIVERY_TRIPS: 'ordermanager_delivery_trips_v5',
 };
 
 // Event listener mechanism for reactivity
@@ -276,6 +279,97 @@ export const fetchRealRoadRoute = async (
     return null;
   }
 };
+
+/**
+ * Generate native Google Maps directions URL for multi-stop bundled trips
+ * Origin: Warehouse, Destination: Final Stop, Waypoints: Intermediary stops
+ */
+export const getMultiStopGoogleMapsUrl = (
+  originLat: number,
+  originLng: number,
+  stops: Array<{ lat: number; lng: number }>
+): string => {
+  if (!stops || stops.length === 0) {
+    return `https://www.google.com/maps/dir/?api=1&origin=${originLat},${originLng}&travelmode=driving`;
+  }
+  if (stops.length === 1) {
+    return `https://www.google.com/maps/dir/?api=1&origin=${originLat},${originLng}&destination=${stops[0].lat},${stops[0].lng}&travelmode=driving`;
+  }
+  const destination = stops[stops.length - 1];
+  const waypoints = stops.slice(0, stops.length - 1);
+  const waypointsParam = waypoints.map((w) => `${w.lat},${w.lng}`).join('|');
+  return `https://www.google.com/maps/dir/?api=1&origin=${originLat},${originLng}&destination=${destination.lat},${destination.lng}&waypoints=${encodeURIComponent(waypointsParam)}&travelmode=driving`;
+};
+
+/**
+ * Fetch multi-stop driving route & combined road coordinates from OSRM
+ */
+export const fetchMultiStopRealRoadRoute = async (
+  originLat: number,
+  originLng: number,
+  stops: Array<{ lat: number; lng: number; label?: string }>
+): Promise<RealRoadRoute | null> => {
+  if (!stops || stops.length === 0) return null;
+  try {
+    const coordsStr = [`${originLng},${originLat}`, ...stops.map((s) => `${s.lng},${s.lat}`)].join(';');
+    const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson&steps=true`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) return null;
+
+    const route = data.routes[0];
+    const distanceKm = Number((route.distance / 1000).toFixed(1));
+    const durationMinutes = Math.max(1, Math.round(route.duration / 60));
+
+    const coordinates: [number, number][] = (route.geometry?.coordinates || []).map(
+      (c: [number, number]) => [c[1], c[0]]
+    );
+
+    const steps: RoadStep[] = [];
+    if (Array.isArray(route.legs)) {
+      route.legs.forEach((leg: any, legIdx: number) => {
+        const destName = stops[legIdx]?.label || `Điểm dừng ${legIdx + 1}`;
+        steps.push({
+          instruction: `Chặng ${legIdx + 1}: ${legIdx === 0 ? 'Từ Kho đến ' + destName : `Từ Điểm ${legIdx} đến ${destName}`}`,
+          distanceMeters: Math.round(leg.distance || 0),
+          durationSeconds: Math.round(leg.duration || 0),
+          streetName: '',
+        });
+        if (Array.isArray(leg.steps)) {
+          leg.steps.forEach((st: any) => {
+            const street = st.name || '';
+            const type = st.maneuver?.type || '';
+            let action = 'Đi tiếp';
+            if (type === 'depart') action = 'Bắt đầu xuất phát';
+            else if (type === 'arrive') action = `Đã đến ${destName}`;
+            else if (st.maneuver?.modifier?.includes('left')) action = 'Rẽ trái vào';
+            else if (st.maneuver?.modifier?.includes('right')) action = 'Rẽ phải vào';
+            else if (st.maneuver?.modifier?.includes('straight')) action = 'Đi thẳng theo';
+            const instr = street ? `${action} ${street}` : action;
+            steps.push({
+              instruction: instr,
+              distanceMeters: Math.round(st.distance || 0),
+              durationSeconds: Math.round(st.duration || 0),
+              streetName: street,
+            });
+          });
+        }
+      });
+    }
+
+    return {
+      distanceKm,
+      durationMinutes,
+      coordinates,
+      steps,
+    };
+  } catch (err) {
+    console.warn('Could not fetch multi-stop OSRM route:', err);
+    return null;
+  }
+};
+
 
 
 /**
@@ -706,7 +800,7 @@ export const getOrders = (): Order[] => {
     if (data) {
       const parsed: Order[] = JSON.parse(data);
       // Ensure all orders have store and delivery coordinates and debt/payment fields populated
-      return parsed.map((o, idx) => {
+      const orders: Order[] = parsed.map((o, idx) => {
         const subtotal = o.subtotal !== undefined
           ? o.subtotal
           : (o.items || []).reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0);
@@ -762,10 +856,39 @@ export const getOrders = (): Order[] => {
           ] : []),
           storeLat: o.storeLat || 10.7418,
           storeLng: o.storeLng || 106.6722,
-          deliveryLat: o.deliveryLat || (10.775 + (idx % 6) * 0.006),
-          deliveryLng: o.deliveryLng || (10.695 + (idx % 6) * 0.007),
+          deliveryLat: (() => {
+            const addr = (o.deliveryAddress || '').toLowerCase();
+            const isQ7 = addr.includes('phú thuận') || addr.includes('phu thuan') || addr.includes('q7') || addr.includes('quận 7') || addr.includes('q.7');
+            // If address is in Q7 / Phú Thuận and currently placed in Q1 (lat > 10.765), correct it to Q7
+            if (isQ7 && (!o.deliveryLat || o.deliveryLat > 10.765 || !isCoordinateInVietnam(o.deliveryLat, o.deliveryLng))) {
+              const res = resolveCoordinatesFromAddress(o.deliveryAddress);
+              return res ? res.lat : 10.7295;
+            }
+            if (typeof o.deliveryLat === 'number' && isCoordinateInVietnam(o.deliveryLat, o.deliveryLng)) {
+              return o.deliveryLat;
+            }
+            const res = resolveCoordinatesFromAddress(o.deliveryAddress);
+            return res ? res.lat : 10.7418 + (idx % 6) * 0.005;
+          })(),
+          deliveryLng: (() => {
+            const addr = (o.deliveryAddress || '').toLowerCase();
+            const isQ7 = addr.includes('phú thuận') || addr.includes('phu thuan') || addr.includes('q7') || addr.includes('quận 7') || addr.includes('q.7');
+            // If address is in Q7 / Phú Thuận and currently placed in Q1, correct it to Q7
+            if (isQ7 && (!o.deliveryLng || o.deliveryLat! > 10.765 || !isCoordinateInVietnam(o.deliveryLat, o.deliveryLng))) {
+              const res = resolveCoordinatesFromAddress(o.deliveryAddress);
+              return res ? res.lng : 106.7350;
+            }
+            if (typeof o.deliveryLng === 'number' && isCoordinateInVietnam(o.deliveryLat, o.deliveryLng)) {
+              return o.deliveryLng;
+            }
+            const res = resolveCoordinatesFromAddress(o.deliveryAddress);
+            return res ? res.lng : 106.6722 + (idx % 6) * 0.005;
+          })(),
         };
       });
+      // Save back corrected orders so localStorage keeps accurate coordinates
+      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+      return orders;
     }
   } catch (e) {
     console.error('Error reading orders', e);
@@ -833,14 +956,31 @@ export const createOrder = (orderData: Omit<Order, 'id' | 'orderCode' | 'created
     }
   }
 
+  // Check if address specifies District 7 or other specific districts
+  const resolvedFromAddr = resolveCoordinatesFromAddress(orderData.deliveryAddress || '');
+  const addrLower = (orderData.deliveryAddress || '').toLowerCase();
+  const isQ7Address = addrLower.includes('phú thuận') || addrLower.includes('phu thuan') || addrLower.includes('q7') || addrLower.includes('quận 7') || addrLower.includes('q.7');
+
+  if (isQ7Address && (!safeDeliveryLat || safeDeliveryLat > 10.765)) {
+    safeDeliveryLat = resolvedFromAddr?.lat || 10.7295;
+    safeDeliveryLng = resolvedFromAddr?.lng || 106.7350;
+  } else if ((!safeDeliveryLat || !isCoordinateInVietnam(safeDeliveryLat, safeDeliveryLng)) && resolvedFromAddr) {
+    safeDeliveryLat = resolvedFromAddr.lat;
+    safeDeliveryLng = resolvedFromAddr.lng;
+  }
+
   const newOrder: Order = {
     ...orderData,
     id: `ord-${Date.now()}`,
     orderCode,
     storeLat: orderData.storeLat || 10.7418,
     storeLng: orderData.storeLng || 106.6722,
-    deliveryLat: typeof safeDeliveryLat === 'number' && Number.isFinite(safeDeliveryLat) ? safeDeliveryLat : 10.7825,
-    deliveryLng: typeof safeDeliveryLng === 'number' && Number.isFinite(safeDeliveryLng) ? safeDeliveryLng : 106.7050,
+    deliveryLat: typeof safeDeliveryLat === 'number' && Number.isFinite(safeDeliveryLat) && isCoordinateInVietnam(safeDeliveryLat, safeDeliveryLng)
+      ? safeDeliveryLat
+      : (resolvedFromAddr?.lat || 10.7340),
+    deliveryLng: typeof safeDeliveryLng === 'number' && Number.isFinite(safeDeliveryLng) && isCoordinateInVietnam(safeDeliveryLat, safeDeliveryLng)
+      ? safeDeliveryLng
+      : (resolvedFromAddr?.lng || 106.7218),
     subtotal: itemsSubtotal,
     shippingFee,
     prepaidAmount,
@@ -1191,6 +1331,168 @@ export const setDefaultDepartureLocation = (id: string): void => {
   localStorage.setItem(STORAGE_KEYS.DEPARTURE_LOCATIONS, JSON.stringify(updated));
   localStorage.setItem(STORAGE_KEYS.ACTIVE_DEPARTURE_ID, id);
   notifyListeners();
+};
+
+// --- DELIVERY TRIPS (CHUYẾN GIAO HÀNG GHÉP ĐƠN) ---
+export const getDeliveryTrips = (): DeliveryTrip[] => {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.DELIVERY_TRIPS);
+    if (data) {
+      const parsed: DeliveryTrip[] = JSON.parse(data);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error('Error reading delivery trips', e);
+  }
+  return [];
+};
+
+export const getNextTripCode = (): string => {
+  const trips = getDeliveryTrips();
+  const today = new Date();
+  const datePrefix = `CG-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`;
+  const countToday = trips.filter((t) => t.tripCode?.startsWith(datePrefix)).length + 1;
+  return `${datePrefix}-${String(countToday).padStart(3, '0')}`;
+};
+
+export const saveDeliveryTrip = (
+  tripData: Omit<DeliveryTrip, 'id' | 'tripCode' | 'createdAt'> & { id?: string; tripCode?: string }
+): DeliveryTrip => {
+  const trips = getDeliveryTrips();
+  const now = new Date().toISOString();
+  let savedTrip: DeliveryTrip;
+
+  if (tripData.id) {
+    const index = trips.findIndex((t) => t.id === tripData.id);
+    if (index !== -1) {
+      savedTrip = {
+        ...trips[index],
+        ...tripData,
+        id: tripData.id,
+        tripCode: tripData.tripCode || trips[index].tripCode,
+      };
+      trips[index] = savedTrip;
+    } else {
+      savedTrip = {
+        ...tripData,
+        id: tripData.id,
+        tripCode: tripData.tripCode || getNextTripCode(),
+        createdAt: now,
+      };
+      trips.unshift(savedTrip);
+    }
+  } else {
+    savedTrip = {
+      ...tripData,
+      id: `trip-${Date.now()}`,
+      tripCode: tripData.tripCode || getNextTripCode(),
+      createdAt: now,
+    };
+    trips.unshift(savedTrip);
+  }
+
+  localStorage.setItem(STORAGE_KEYS.DELIVERY_TRIPS, JSON.stringify(trips));
+  notifyListeners();
+  return savedTrip;
+};
+
+export const deleteDeliveryTrip = (
+  id: string,
+  revertOrdersToPending: boolean = true
+): { success: boolean; tripCode?: string; orderCount: number; revertedCount: number } => {
+  const trips = getDeliveryTrips();
+  const target = trips.find((t) => t.id === id);
+  if (!target) return { success: false, orderCount: 0, revertedCount: 0 };
+
+  const filtered = trips.filter((t) => t.id !== id);
+  localStorage.setItem(STORAGE_KEYS.DELIVERY_TRIPS, JSON.stringify(filtered));
+
+  let revertedCount = 0;
+  if (revertOrdersToPending && target.orderIds && target.orderIds.length > 0) {
+    const orders = getOrders();
+    let hasOrderChanges = false;
+    const now = new Date().toISOString();
+    target.orderIds.forEach((ordId) => {
+      const oIdx = orders.findIndex((o) => o.id === ordId);
+      if (oIdx !== -1) {
+        if (orders[oIdx].status === 'in_transit') {
+          orders[oIdx] = {
+            ...orders[oIdx],
+            status: 'pending',
+            updatedAt: now,
+          };
+          hasOrderChanges = true;
+          revertedCount++;
+        }
+      }
+    });
+    if (hasOrderChanges) {
+      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    }
+  }
+
+  notifyListeners();
+  return {
+    success: true,
+    tripCode: target.tripCode,
+    orderCount: target.orderIds.length,
+    revertedCount,
+  };
+};
+
+export const updateDeliveryTripStatus = (
+  id: string,
+  status: DeliveryTrip['status']
+): DeliveryTrip | null => {
+  const trips = getDeliveryTrips();
+  const index = trips.findIndex((t) => t.id === id);
+  if (index === -1) return null;
+
+  const now = new Date().toISOString();
+  const updated: DeliveryTrip = {
+    ...trips[index],
+    status,
+    startedAt: status === 'in_transit' && !trips[index].startedAt ? now : trips[index].startedAt,
+    completedAt: status === 'completed' ? now : trips[index].completedAt,
+  };
+
+  trips[index] = updated;
+  localStorage.setItem(STORAGE_KEYS.DELIVERY_TRIPS, JSON.stringify(trips));
+
+  // When trip starts, automatically update order statuses to 'in_transit' and assign shipper
+  if (status === 'in_transit' || status === 'completed') {
+    const orders = getOrders();
+    let hasOrderChanges = false;
+    updated.orderIds.forEach((ordId) => {
+      const oIdx = orders.findIndex((o) => o.id === ordId);
+      if (oIdx !== -1) {
+        if (status === 'in_transit' && orders[oIdx].status !== 'delivered' && orders[oIdx].status !== 'completed') {
+          orders[oIdx] = {
+            ...orders[oIdx],
+            status: 'in_transit',
+            deliveryStaffId: updated.shipperId || orders[oIdx].deliveryStaffId,
+            deliveryStaffName: updated.shipperName || orders[oIdx].deliveryStaffName,
+            deliveryStaffPhone: updated.shipperPhone || orders[oIdx].deliveryStaffPhone,
+            updatedAt: now,
+          };
+          hasOrderChanges = true;
+        } else if (status === 'completed' && orders[oIdx].status !== 'cancelled') {
+          orders[oIdx] = {
+            ...orders[oIdx],
+            status: 'delivered',
+            updatedAt: now,
+          };
+          hasOrderChanges = true;
+        }
+      }
+    });
+    if (hasOrderChanges) {
+      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    }
+  }
+
+  notifyListeners();
+  return updated;
 };
 
 // --- WARRANTY ACTIVATION BONUS CALCULATOR ---

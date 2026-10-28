@@ -187,3 +187,27 @@ export interface StoreInfo {
   lng?: number;
 }
 
+export interface DeliveryTrip {
+  id: string;
+  tripCode: string; // e.g. CG-2026-001
+  departureLocationId?: string;
+  departureLocationName: string;
+  departureAddress: string;
+  departureLat: number;
+  departureLng: number;
+  shipperId?: string;
+  shipperName?: string;
+  shipperPhone?: string;
+  orderIds: string[]; // Array of order IDs in exact stop sequence [order1, order2, ...]
+  status: 'planning' | 'in_transit' | 'completed' | 'cancelled';
+  totalDistanceKm: number;
+  totalDurationMins: number;
+  totalCodAmount: number;
+  totalItemsCount: number;
+  notes?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+

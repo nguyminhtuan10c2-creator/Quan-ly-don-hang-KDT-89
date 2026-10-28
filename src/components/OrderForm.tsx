@@ -49,6 +49,7 @@ import {
   getDepartureLocations,
   getActiveDepartureLocation,
 } from '../services/storageService';
+import { resolveCoordinatesFromAddress } from '../services/geocodingService';
 import { VietnamAddressMapPicker } from './VietnamAddressMapPicker';
 import { DepartureLocationModal } from './DepartureLocationModal';
 
@@ -608,6 +609,25 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
     const activeDep = departureLocations.find((d) => d.id === selectedDepartureId) || defaultDeparture;
 
+    // Check if address specifies District 7 / Phú Thuận or known districts
+    let finalDeliveryLat = deliveryLat;
+    let finalDeliveryLng = deliveryLng;
+
+    const addrLower = deliveryAddress.trim().toLowerCase();
+    const isQ7 = addrLower.includes('phú thuận') || addrLower.includes('phu thuan') || addrLower.includes('q7') || addrLower.includes('quận 7') || addrLower.includes('q.7');
+
+    if (isQ7 && (!finalDeliveryLat || finalDeliveryLat > 10.765)) {
+      const res = resolveCoordinatesFromAddress(deliveryAddress);
+      finalDeliveryLat = res?.lat || 10.7295;
+      finalDeliveryLng = res?.lng || 106.7350;
+    } else if (!finalDeliveryLat) {
+      const res = resolveCoordinatesFromAddress(deliveryAddress);
+      if (res) {
+        finalDeliveryLat = res.lat;
+        finalDeliveryLng = res.lng;
+      }
+    }
+
     // Save/Update Order & automatically recalculate stock & bonus
     const savedOrder = saveOrder({
       id: editingOrder ? editingOrder.id : undefined,
@@ -615,8 +635,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
       deliveryAddress: deliveryAddress.trim(),
-      deliveryLat,
-      deliveryLng,
+      deliveryLat: finalDeliveryLat,
+      deliveryLng: finalDeliveryLng,
       storeLat: activeDep.lat,
       storeLng: activeDep.lng,
       departureLocationId: activeDep.id,

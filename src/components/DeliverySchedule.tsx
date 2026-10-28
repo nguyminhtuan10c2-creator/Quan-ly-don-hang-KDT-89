@@ -40,11 +40,17 @@ import {
   Building2,
   Plus,
   Home,
+  CheckSquare,
+  Square,
+  PackageCheck,
+  ListOrdered,
+  Boxes,
+  Trash2,
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Order, OrderStatus, StoreInfo, Staff, DepartureLocation } from '../types';
+import { Order, OrderStatus, StoreInfo, Staff, DepartureLocation, DeliveryTrip } from '../types';
 import {
   formatVND,
   formatDateVI,
@@ -56,20 +62,27 @@ import {
   calculateDistanceKm,
   estimateTravelTimeMinutes,
   getGoogleMapsDirectionsUrl,
+  getMultiStopGoogleMapsUrl,
   getOsmDirectionsUrl,
   optimizeDeliveryRouteSequence,
   fetchRealRoadRoute,
+  fetchMultiStopRealRoadRoute,
   RealRoadRoute,
   getDepartureLocations,
   getActiveDepartureLocation,
   setActiveDepartureLocation,
+  getDeliveryTrips,
+  deleteDeliveryTrip,
 } from '../services/storageService';
 import {
   isCoordinateInVietnam,
   DEFAULT_VIETNAM_COORDS,
   geocodeVietnamAddress,
+  resolveCoordinatesFromAddress,
 } from '../services/geocodingService';
+import { deleteTripFromFirebase } from '../services/firebaseService';
 import { DepartureLocationModal } from './DepartureLocationModal';
+import { DeliveryBatchModal } from './DeliveryBatchModal';
 
 // Fix Leaflet icons
 try {
@@ -270,6 +283,12 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
   const [realRoadRoute, setRealRoadRoute] = useState<RealRoadRoute | null>(null);
   const [isLoadingRoadRoute, setIsLoadingRoadRoute] = useState<boolean>(false);
 
+  // Multi-Stop Bundled Trip Real Road Route (OSRM with real street bends and turns)
+  const [multiStopRoadRoute, setMultiStopRoadRoute] = useState<RealRoadRoute | null>(null);
+  const [isLoadingMultiStopRoute, setIsLoadingMultiStopRoute] = useState<boolean>(false);
+  const [previewTrip, setPreviewTrip] = useState<DeliveryTrip | null>(null);
+  const [showTurnListModal, setShowTurnListModal] = useState<boolean>(false);
+
   // Date filters
   const todayStr = new Date().toISOString().slice(0, 10);
   const tomorrow = new Date();
@@ -296,6 +315,67 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
   const [newStatusChoice, setNewStatusChoice] = useState<OrderStatus>('delivering');
   const [shipperNoteInput, setShipperNoteInput] = useState<string>('');
   const [assignedShipperId, setAssignedShipperId] = useState<string>('');
+
+  // Delivery Batch (Ghép Đơn Giao Hàng) State
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState<boolean>(false);
+  const [batchModalInitialTrip, setBatchModalInitialTrip] = useState<DeliveryTrip | null>(null);
+  const [checkedOrderIdsForBatch, setCheckedOrderIdsForBatch] = useState<string[]>([]);
+  const [deliveryTrips, setDeliveryTrips] = useState<DeliveryTrip[]>(getDeliveryTrips());
+
+  const refreshDeliveryTrips = () => {
+    setDeliveryTrips(getDeliveryTrips());
+  };
+
+  const handleToggleOrderForBatch = (orderId: string) => {
+    setCheckedOrderIdsForBatch((prev) =>
+      prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]
+    );
+  };
+
+  const handleOpenBatchWithSelected = () => {
+    setBatchModalInitialTrip(null);
+    setIsBatchModalOpen(true);
+  };
+
+  // Toggle visual route lines on map
+  const [showTripRoutePolyline, setShowTripRoutePolyline] = useState<boolean>(true);
+
+  // In-app Trip Deletion Modal State
+  const [tripToDelete, setTripToDelete] = useState<{ id: string; tripCode: string; orderCount: number } | null>(null);
+  const [revertOrdersOnDelete, setRevertOrdersOnDelete] = useState<boolean>(true);
+  const [isDeletingTrip, setIsDeletingTrip] = useState<boolean>(false);
+  const [tripNoticeMessage, setTripNoticeMessage] = useState<string | null>(null);
+
+  // Auto-dismiss trip notice
+  useEffect(() => {
+    if (tripNoticeMessage) {
+      const timer = setTimeout(() => setTripNoticeMessage(null), 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [tripNoticeMessage]);
+
+  const handleRequestDeleteTrip = (id: string, tripCode: string, orderCount: number) => {
+    setTripToDelete({ id, tripCode, orderCount });
+  };
+
+  const handleConfirmDeleteTrip = async () => {
+    if (!tripToDelete) return;
+    setIsDeletingTrip(true);
+    try {
+      const result = deleteDeliveryTrip(tripToDelete.id, revertOrdersOnDelete);
+      await deleteTripFromFirebase(tripToDelete.id);
+      setDeliveryTrips(getDeliveryTrips());
+      setTripNoticeMessage(`Đã xóa thành công lộ trình chuyến [${tripToDelete.tripCode}]! ${
+        result.revertedCount > 0 ? `Đã hoàn lại ${result.revertedCount} đơn về trạng thái Chờ giao.` : ''
+      }`);
+      setTripToDelete(null);
+    } catch (err) {
+      console.error('Error deleting trip from schedule', err);
+      setTripNoticeMessage('Lỗi khi xóa lộ trình. Vui lòng thử lại.');
+    } finally {
+      setIsDeletingTrip(false);
+    }
+  };
 
   // Handle Shipper Live GPS Detection
   const handleDetectShipperLocation = () => {
@@ -365,15 +445,35 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
       let custLat = order.deliveryLat;
       let custLng = order.deliveryLng;
 
-      // Auto-correct inverted coordinates or fallback safely within Vietnam
-      if (!isCoordinateInVietnam(custLat, custLng)) {
+      // Auto-correct if address is in District 7 / Phú Thuận but coordinates mistakenly pointed to District 1 (> 10.765)
+      const addrLower = (order.deliveryAddress || '').toLowerCase();
+      const isQ7Address =
+        addrLower.includes('phú thuận') ||
+        addrLower.includes('phu thuan') ||
+        addrLower.includes('q7') ||
+        addrLower.includes('quận 7') ||
+        addrLower.includes('q.7');
+
+      if (isQ7Address) {
+        if (!custLat || custLat > 10.765 || !isCoordinateInVietnam(custLat, custLng)) {
+          const resolved = resolveCoordinatesFromAddress(order.deliveryAddress);
+          custLat = resolved ? resolved.lat : 10.7295;
+          custLng = resolved ? resolved.lng : 106.7350;
+        }
+      } else if (!isCoordinateInVietnam(custLat, custLng)) {
         if (typeof custLat === 'number' && typeof custLng === 'number' && isCoordinateInVietnam(custLng, custLat)) {
           const temp = custLat;
           custLat = custLng;
           custLng = temp;
         } else {
-          custLat = storeLat + (Math.sin(order.id.charCodeAt(order.id.length - 1)) * 0.035);
-          custLng = storeLng + (Math.cos(order.id.charCodeAt(order.id.length - 1)) * 0.04);
+          const resolved = resolveCoordinatesFromAddress(order.deliveryAddress);
+          if (resolved) {
+            custLat = resolved.lat;
+            custLng = resolved.lng;
+          } else {
+            custLat = storeLat + 0.008;
+            custLng = storeLng + 0.008;
+          }
         }
       }
 
@@ -561,6 +661,55 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
     return coords;
   }, [activeOriginPos, sortedOrders]);
 
+  // Fetch Multi-stop real road route (OSRM street-level bends and turns)
+  useEffect(() => {
+    let isCancelled = false;
+
+    let stopsToRoute: Array<{ lat: number; lng: number; label?: string }> = [];
+    let startLat = activeOriginPos[0];
+    let startLng = activeOriginPos[1];
+
+    if (previewTrip) {
+      startLat = previewTrip.departureLat || activeOriginPos[0];
+      startLng = previewTrip.departureLng || activeOriginPos[1];
+      const tripOrders = (previewTrip.orderIds || [])
+        .map((id) => orders.find((o) => o.id === id))
+        .filter(Boolean) as Order[];
+
+      stopsToRoute = tripOrders.map((ord, idx) => ({
+        lat: ord.deliveryLat || 10.7418,
+        lng: ord.deliveryLng || 106.6722,
+        label: `Điểm ${idx + 1} (${ord.orderCode} - ${ord.customerName})`,
+      }));
+    } else if (sortBy === 'optimized_trip' && sortedOrders.length > 0) {
+      stopsToRoute = sortedOrders.slice(0, 10).map((ord, idx) => ({
+        lat: ord.deliveryLat || 10.7418,
+        lng: ord.deliveryLng || 106.6722,
+        label: `Điểm ${idx + 1} (${ord.orderCode} - ${ord.customerName})`,
+      }));
+    }
+
+    if (stopsToRoute.length > 0) {
+      setIsLoadingMultiStopRoute(true);
+      fetchMultiStopRealRoadRoute(startLat, startLng, stopsToRoute)
+        .then((res) => {
+          if (!isCancelled) {
+            setMultiStopRoadRoute(res);
+            setIsLoadingMultiStopRoute(false);
+          }
+        })
+        .catch(() => {
+          if (!isCancelled) setIsLoadingMultiStopRoute(false);
+        });
+    } else {
+      setMultiStopRoadRoute(null);
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [previewTrip, sortBy, sortedOrders, activeOriginPos, orders]);
+
   // Quick Action Handler: Open Status Update Modal
   const handleOpenStatusModal = (order: Order, suggestedStatus?: OrderStatus) => {
     setStatusUpdateTarget(order);
@@ -638,6 +787,35 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
             </span>
           </button>
 
+          {/* Button: Ghép đơn giao hàng (Tạo chuyến) */}
+          <button
+            onClick={() => {
+              setBatchModalInitialTrip(null);
+              setCheckedOrderIdsForBatch([]);
+              setIsBatchModalOpen(true);
+            }}
+            className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs px-3.5 py-2.5 rounded-xl flex items-center space-x-1.5 transition-all shadow-md"
+            title="Ghép nhiều đơn hàng cho 1 shipper chạy từ kho qua Điểm 1 rồi Điểm 2"
+          >
+            <Boxes className="w-4 h-4 text-slate-950" />
+            <span>+ Ghép Đơn Giao Hàng</span>
+          </button>
+
+          {/* Button: Quản lý các chuyến ghép */}
+          {deliveryTrips.length > 0 && (
+            <button
+              onClick={() => {
+                setBatchModalInitialTrip(null);
+                setIsBatchModalOpen(true);
+              }}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center space-x-1.5 transition-all shadow-xs border border-indigo-400/50"
+              title="Xem danh sách các chuyến ghép đơn đã tạo"
+            >
+              <Layers className="w-4 h-4" />
+              <span>Chuyến ghép ({deliveryTrips.length})</span>
+            </button>
+          )}
+
           <button
             onClick={() => setShowMap(!showMap)}
             className={`font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center space-x-1.5 transition-all shadow-xs border ${
@@ -658,6 +836,47 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
             <Printer className="w-4 h-4" />
             <span className="hidden sm:inline">In lịch trình</span>
           </button>
+        </div>
+      </div>
+
+      {/* EXPLANATION BANNER: Điểm dừng 1, 2, 3, 4 trên bản đồ là gì? */}
+      <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-amber-50 border-2 border-blue-200 rounded-2xl p-4 sm:p-5 text-slate-800 shadow-xs space-y-2 no-print">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-start space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs font-black text-xs">
+              1-4
+            </div>
+            <div>
+              <h3 className="font-black text-sm text-slate-900 flex items-center space-x-2">
+                <span>Điểm dừng 1, 2, 3, 4 trên bản đồ là gì?</span>
+                <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                  Thứ tự lộ trình giao hàng liên tục
+                </span>
+              </h3>
+              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                Trên bản đồ, điểm <strong>🏢 KHO (Hiệp Ân Q8)</strong> là nơi xuất phát. Các số tròn{' '}
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[11px] font-black mx-1">1</span>,{' '}
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[11px] font-black mx-1">2</span>,{' '}
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[11px] font-black mx-1">3</span>...
+                chính là <strong>thứ tự các điểm dừng trả hàng cho khách</strong>. Hệ thống tự động sắp xếp theo khoảng cách tối ưu để Shipper đi từ kho ➔ giao khách 1 ➔ tiếp tục tới khách 2 ➔ khách 3 trên cùng tuyến đường mà không bị chạy vòng vèo, tiết kiệm tối đa xăng và thời gian.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setBatchModalInitialTrip(null);
+                setCheckedOrderIdsForBatch([]);
+                setIsBatchModalOpen(true);
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-xs transition-transform active:scale-95"
+            >
+              <Boxes className="w-4 h-4" />
+              <span>Ghép đơn giao hàng ngay</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1196,7 +1415,7 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
 
       {/* Interactive Leaflet & OpenStreetMap Delivery Route Map */}
       {showMap && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden no-print">
+        <div id="delivery-map-section" className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden no-print">
           <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex items-center space-x-2">
               <Compass className="w-4 h-4 text-blue-600" />
@@ -1238,6 +1457,21 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
                 </button>
               </div>
 
+              {/* Toggle connecting route lines on map */}
+              <button
+                type="button"
+                onClick={() => setShowTripRoutePolyline(!showTripRoutePolyline)}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-black flex items-center space-x-1 transition-all ${
+                  showTripRoutePolyline
+                    ? 'bg-blue-600 text-white shadow-2xs hover:bg-blue-700'
+                    : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-300'
+                }`}
+                title={showTripRoutePolyline ? 'Bấm để ẩn đường kẻ nối lộ trình' : 'Bấm để hiện đường kẻ nối lộ trình'}
+              >
+                <Route className="w-3 h-3" />
+                <span>{showTripRoutePolyline ? 'Đường lộ trình: BẬT' : 'Đường lộ trình: TẮT'}</span>
+              </button>
+
               {shipperLocation && (
                 <span className="flex items-center space-x-1 bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full font-bold text-[10px]">
                   <span className="w-2 h-2 rounded-full bg-sky-500 animate-ping inline-block" />
@@ -1246,6 +1480,61 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
               )}
             </div>
           </div>
+
+          {/* BANNER LỘ TRÌNH NGÃ RẼ ĐƯỜNG BỘ THỰC TẾ (OSRM) */}
+          {(previewTrip || (sortBy === 'optimized_trip' && sortedOrders.length > 0)) && (
+            <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-blue-700/60 text-xs">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-7 h-7 rounded-lg bg-blue-500/30 border border-blue-400/50 flex items-center justify-center text-blue-300 shrink-0">
+                  <Route className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="font-extrabold text-sm">
+                      {previewTrip ? `Lộ trình ngã rẽ Chuyến ${previewTrip.tripCode}` : 'Lộ trình đa điểm theo ngã rẽ thực tế (OSRM)'}
+                    </span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                      isLoadingMultiStopRoute
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-400/40'
+                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                    }`}>
+                      {isLoadingMultiStopRoute ? 'Đang tính ngã rẽ...' : 'Bám sát mạng lưới đường bộ'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-blue-200 mt-0.5">
+                    {previewTrip
+                      ? `Kho ➔ ${previewTrip.orderIds.length} điểm dừng · ${multiStopRoadRoute ? `Cự ly đường bộ: ~${multiStopRoadRoute.distanceKm} km (~${multiStopRoadRoute.durationMinutes} phút)` : 'Đang tải đường đi...'}`
+                      : `Đường đi uốn lượn theo từng con đường & ngã rẽ qua các điểm giao`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                {multiStopRoadRoute && multiStopRoadRoute.steps && multiStopRoadRoute.steps.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowTurnListModal(true)}
+                    className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-lg flex items-center space-x-1.5 transition-all shadow-sm active:scale-95"
+                    title="Xem chi tiết các ngã rẽ trên đường"
+                  >
+                    <ListOrdered className="w-3.5 h-3.5" />
+                    <span>Xem {multiStopRoadRoute.steps.length} ngã rẽ</span>
+                  </button>
+                )}
+
+                {previewTrip && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTrip(null)}
+                    className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-blue-200 border border-white/20 rounded-lg text-xs font-bold transition-colors"
+                    title="Trở về xem toàn bộ đơn trên map"
+                  >
+                    ✕ Tắt xem chuyến này
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="h-[380px] sm:h-[460px] w-full relative z-0">
             <MapContainer
@@ -1279,7 +1568,11 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
                 shipperPos={shipperLocation ? [shipperLocation.lat, shipperLocation.lng] : null}
                 stops={mapStops}
                 selectedOrder={focusedOrder}
-                roadRouteCoords={realRoadRoute?.coordinates}
+                roadRouteCoords={
+                  activeNavOrder && realRoadRoute?.coordinates
+                    ? realRoadRoute.coordinates
+                    : multiStopRoadRoute?.coordinates
+                }
               />
 
               {/* 1. Departure Origin Marker */}
@@ -1396,16 +1689,33 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
                 );
               })}
 
-              {/* 4. Real Road Driving Polyline (Bends along actual streets!) */}
-              {realRoadRoute && realRoadRoute.coordinates.length > 0 ? (
+              {/* 4. Real Road Driving Polyline (Bends along actual streets and turns!) */}
+              {activeNavOrder && realRoadRoute && realRoadRoute.coordinates.length > 0 ? (
                 <Polyline
                   positions={realRoadRoute.coordinates}
                   color="#2563eb"
                   weight={6}
                   opacity={0.9}
                 />
-              ) : tripRoutePolylineCoords.length > 1 ? (
-                /* Sequential Trip Polyline */
+              ) : showTripRoutePolyline && multiStopRoadRoute && multiStopRoadRoute.coordinates.length > 0 ? (
+                <>
+                  {/* Glowing background */}
+                  <Polyline
+                    positions={multiStopRoadRoute.coordinates}
+                    color="#60a5fa"
+                    weight={10}
+                    opacity={0.35}
+                  />
+                  {/* Sharp driving line */}
+                  <Polyline
+                    positions={multiStopRoadRoute.coordinates}
+                    color="#1d4ed8"
+                    weight={6}
+                    opacity={0.95}
+                  />
+                </>
+              ) : showTripRoutePolyline && tripRoutePolylineCoords.length > 1 ? (
+                /* Sequential Trip Polyline Fallback */
                 <Polyline
                   positions={tripRoutePolylineCoords}
                   color="#2563eb"
@@ -1415,6 +1725,190 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
                 />
               ) : null}
             </MapContainer>
+          </div>
+        </div>
+      )}
+
+      {/* CÁC CHUYẾN GHÉP ĐƠN ĐÃ TẠO & QUẢN LÝ / XÓA LỘ TRÌNH TRỰC TIẾP */}
+      {deliveryTrips.length > 0 && (
+        <div className="bg-white rounded-2xl border-2 border-indigo-200 shadow-md p-5 space-y-4 no-print">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100 pb-3">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-xs">
+                <Boxes className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-black text-base text-slate-900 flex items-center space-x-2">
+                  <span>Lộ Trình Các Chuyến Ghép Đơn Đã Tạo</span>
+                  <span className="bg-indigo-100 text-indigo-800 text-xs px-2.5 py-0.5 rounded-full font-bold">
+                    {deliveryTrips.length} chuyến
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Bạn có thể xem đường đi, in bảng kê, hoặc bấm <strong>"Xóa lộ trình"</strong> để hủy chuyến và đưa đơn về trạng thái Chờ giao.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setBatchModalInitialTrip(null);
+                setCheckedOrderIdsForBatch([]);
+                setIsBatchModalOpen(true);
+              }}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center space-x-1.5 shadow-xs transition-colors self-start sm:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Tạo thêm chuyến mới</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3.5">
+            {deliveryTrips.map((t) => {
+              const tripOrders = (t.orderIds || [])
+                .map((id) => orders.find((o) => o.id === id))
+                .filter(Boolean) as Order[];
+
+              const stopsCoords = tripOrders.map((ord) => ({
+                lat: ord.deliveryLat || 10.7418,
+                lng: ord.deliveryLng || 106.6722,
+                address: ord.deliveryAddress,
+                orderCode: ord.orderCode,
+              }));
+
+              const gMapsUrl = getMultiStopGoogleMapsUrl(
+                t.departureLat || 10.7418,
+                t.departureLng || 106.6722,
+                stopsCoords
+              );
+
+              return (
+                <div
+                  key={t.id}
+                  className="bg-slate-50 hover:bg-indigo-50/40 border border-slate-200 hover:border-indigo-300 rounded-xl p-4 transition-all space-y-3"
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+                    <div className="flex items-center space-x-3">
+                      <span className="font-mono font-black text-sm text-indigo-900 bg-white border border-indigo-200 px-3 py-1 rounded-lg shadow-2xs">
+                        {t.tripCode}
+                      </span>
+                      <span
+                        className={`text-xs px-2.5 py-1 rounded-full font-bold border ${
+                          t.status === 'in_transit'
+                            ? 'bg-amber-100 text-amber-800 border-amber-300'
+                            : t.status === 'completed'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-blue-100 text-blue-800 border-blue-300'
+                        }`}
+                      >
+                        {t.status === 'in_transit'
+                          ? '🚚 Đang đi giao'
+                          : t.status === 'completed'
+                          ? '✅ Đã hoàn thành'
+                          : '📋 Đang lên kế hoạch'}
+                      </span>
+                      <span className="text-xs text-slate-500 font-semibold hidden sm:inline">
+                        {t.createdAt?.slice(0, 10)}
+                      </span>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPreviewTrip(t);
+                          setShowMap(true);
+                          const el = document.getElementById('delivery-map-section');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all shadow-xs active:scale-95 ${
+                          previewTrip?.id === t.id
+                            ? 'bg-blue-700 text-white ring-2 ring-blue-300'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white'
+                        }`}
+                        title="Chiếu đường đi và từng ngã rẽ thực tế của chuyến này lên bản đồ"
+                      >
+                        <Route className="w-3.5 h-3.5" />
+                        <span>{previewTrip?.id === t.id ? 'Đang chiếu ngã rẽ' : 'Xem lộ trình ngã rẽ'}</span>
+                      </button>
+
+                      {gMapsUrl && (
+                        <a
+                          href={gMapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center space-x-1 shadow-2xs transition-colors"
+                          title="Mở Google Maps dẫn đường cả chuyến"
+                        >
+                          <Navigation className="w-3.5 h-3.5" />
+                          <span>Google Maps</span>
+                        </a>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBatchModalInitialTrip(t);
+                          setIsBatchModalOpen(true);
+                        }}
+                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition-colors"
+                        title="Xem chi tiết & Sửa chuyến"
+                      >
+                        Chi tiết / Sửa
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRequestDeleteTrip(t.id, t.tripCode, t.orderIds.length)}
+                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all shadow-xs active:scale-95"
+                        title="Xóa / Hủy bỏ hoàn toàn lộ trình chuyến này"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Xóa lộ trình</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Summary row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs bg-white p-3 rounded-lg border border-slate-200">
+                    <div>
+                      <span className="text-slate-400 font-semibold block text-[11px]">Kho xuất phát:</span>
+                      <span className="font-bold text-slate-800">{t.departureLocationName || 'Kho 89 Hiệp Ân Q8'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-semibold block text-[11px]">Shipper giao:</span>
+                      <span className="font-bold text-slate-800">
+                        {t.shipperName || 'Chưa phân công'} {t.shipperPhone ? `(${t.shipperPhone})` : ''}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-semibold block text-[11px]">Số đơn & COD thu hộ:</span>
+                      <span className="font-black text-emerald-600">
+                        {t.orderIds.length} đơn ({t.totalDistanceKm || 0} km) · {formatVND(t.totalCodAmount || 0)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Stops breadcrumb */}
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs pt-1">
+                    <span className="font-bold text-slate-500 text-[11px]">Thứ tự dừng:</span>
+                    <span className="bg-blue-100 text-blue-900 font-bold px-2 py-0.5 rounded text-[11px]">
+                      Kho Q8
+                    </span>
+                    {tripOrders.map((ord, idx) => (
+                      <React.Fragment key={ord.id}>
+                        <ArrowRight className="w-3 h-3 text-slate-400" />
+                        <span className="bg-white border border-slate-300 text-slate-800 font-semibold px-2 py-0.5 rounded text-[11px]">
+                          #{idx + 1}: {ord.orderCode} ({ord.customerName})
+                        </span>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1487,6 +1981,27 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
                   {/* Top Bar: Stop number, Distance Badge, Delivery Window, Status */}
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
                     <div className="flex flex-wrap items-center gap-2">
+                      {/* Checkbox for batch selection */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleOrderForBatch(order.id);
+                        }}
+                        className={`p-1.5 rounded-xl border flex items-center justify-center transition-all ${
+                          checkedOrderIdsForBatch.includes(order.id)
+                            ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                            : 'bg-slate-100 border-slate-300 text-slate-400 hover:text-slate-700'
+                        }`}
+                        title="Tích chọn để ghép đơn này vào chuyến giao hàng đa điểm"
+                      >
+                        {checkedOrderIdsForBatch.includes(order.id) ? (
+                          <CheckSquare className="w-4 h-4" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </button>
+
                       {/* Stop Sequence Badge */}
                       <span className="bg-slate-900 text-white font-black text-xs px-3 py-1 rounded-xl shadow-xs flex items-center space-x-1">
                         <MapPin className="w-3.5 h-3.5 text-amber-400" />
@@ -1718,6 +2233,21 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
+                            setCheckedOrderIdsForBatch([order.id]);
+                            setBatchModalInitialTrip(null);
+                            setIsBatchModalOpen(true);
+                          }}
+                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs px-2.5 py-2 rounded-xl border border-indigo-200 transition-colors flex items-center space-x-1"
+                          title="Ghép đơn này vào chuyến giao hàng đa điểm"
+                        >
+                          <Boxes className="w-3.5 h-3.5 text-indigo-600" />
+                          <span className="hidden sm:inline">Ghép đơn</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
                             onSelectOrderForDetail(order);
                           }}
                           className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-2.5 py-2 rounded-xl border border-slate-200 transition-colors"
@@ -1731,6 +2261,37 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* FLOATING ACTION BAR: Khi tích chọn 1 hoặc nhiều đơn */}
+        {checkedOrderIdsForBatch.length > 0 && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700 flex flex-wrap items-center justify-between gap-3 max-w-xl w-[92vw] animate-in slide-in-from-bottom-4">
+            <div className="flex items-center space-x-2 text-xs">
+              <span className="w-6 h-6 rounded-full bg-blue-500 text-white font-black flex items-center justify-center text-xs shadow-xs">
+                {checkedOrderIdsForBatch.length}
+              </span>
+              <span className="font-bold">Đã chọn {checkedOrderIdsForBatch.length} đơn hàng</span>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={handleOpenBatchWithSelected}
+                className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md flex items-center space-x-1.5 transition-transform active:scale-95"
+              >
+                <Truck className="w-4 h-4 text-slate-950" />
+                <span>Ghép thành chuyến giao</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCheckedOrderIdsForBatch([])}
+                className="text-xs text-slate-400 hover:text-white font-semibold px-2 py-1"
+              >
+                Bỏ chọn
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1890,6 +2451,174 @@ export const DeliverySchedule: React.FC<DeliveryScheduleProps> = ({
           setIsDepartureModalOpen(false);
         }}
       />
+
+      {/* Modal: Ghép đơn giao hàng (Multi-Stop Trip Dispatcher) */}
+      <DeliveryBatchModal
+        isOpen={isBatchModalOpen}
+        onClose={() => {
+          setIsBatchModalOpen(false);
+          setCheckedOrderIdsForBatch([]);
+          setBatchModalInitialTrip(null);
+        }}
+        preselectedOrderIds={checkedOrderIdsForBatch}
+        initialTrip={batchModalInitialTrip}
+        onTripUpdated={() => {
+          refreshDeliveryTrips();
+        }}
+      />
+
+      {/* FEEDBACK TOAST NOTICE */}
+      {tripNoticeMessage && (
+        <div className="fixed bottom-6 right-6 z-60 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 text-xs flex items-center space-x-3 animate-in slide-in-from-bottom-3">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <span className="font-semibold">{tripNoticeMessage}</span>
+          <button
+            onClick={() => setTripNoticeMessage(null)}
+            className="text-slate-400 hover:text-white p-1 rounded-md"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* IN-APP CONFIRMATION MODAL FOR DELETING TRIP */}
+      {tripToDelete && (
+        <div className="fixed inset-0 z-70 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-200 space-y-4">
+            <div className="flex items-start space-x-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 border border-rose-200">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-black text-slate-900">
+                  Xác nhận xóa lộ trình chuyến giao hàng
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Mã lộ trình: <strong className="text-rose-600 font-mono text-sm">{tripToDelete.tripCode}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-900 leading-relaxed">
+              Bạn có chắc chắn muốn xóa hoàn toàn lộ trình chuyến này không? Chuyến đang gồm{' '}
+              <strong>{tripToDelete.orderCount} đơn hàng ghép</strong>.
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <label className="flex items-start space-x-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={revertOrdersOnDelete}
+                  onChange={(e) => setRevertOrdersOnDelete(e.target.checked)}
+                  className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-xs text-slate-700 font-medium">
+                  <strong>Hoàn lại các đơn hàng về trạng thái "Chờ giao"</strong> để bạn có thể sắp xếp hoặc ghép vào các chuyến khác sau này (khuyên dùng).
+                </span>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={isDeletingTrip}
+                onClick={() => setTripToDelete(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingTrip}
+                onClick={handleConfirmDeleteTrip}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5 disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{isDeletingTrip ? 'Đang xóa...' : 'Xác nhận xóa lộ trình'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CHI TIẾT TỪNG NGÃ RẼ TRÊN LỘ TRÌNH (TURN-BY-TURN INSTRUCTIONS) */}
+      {showTurnListModal && multiStopRoadRoute && (
+        <div className="fixed inset-0 z-70 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300">
+                  <Navigation2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm">
+                    Chi Tiết Từng Ngã Rẽ Trên Lộ Trình
+                  </h3>
+                  <p className="text-[11px] text-blue-200">
+                    Tổng cự ly thực tế: <strong>{multiStopRoadRoute.distanceKm} km</strong> · Thời gian dự kiến: <strong>~{multiStopRoadRoute.durationMinutes} phút</strong>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowTurnListModal(false)}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-50/50">
+              {multiStopRoadRoute.steps.map((st, idx) => {
+                const isLegHeader = st.instruction.startsWith('Chặng');
+                return (
+                  <div
+                    key={idx}
+                    className={`p-3 rounded-xl border text-xs transition-all flex items-start space-x-3 ${
+                      isLegHeader
+                        ? 'bg-blue-900 text-white border-blue-700 font-bold shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-800 hover:border-blue-300'
+                    }`}
+                  >
+                    <div className="shrink-0 mt-0.5">
+                      {isLegHeader ? (
+                        <span className="w-6 h-6 rounded-full bg-blue-700 border border-blue-400 flex items-center justify-center font-black text-[10px] text-white">
+                          🏁
+                        </span>
+                      ) : (
+                        <span className="w-5 h-5 rounded-full bg-slate-100 text-blue-600 font-mono font-bold text-[10px] flex items-center justify-center border border-slate-300">
+                          {idx + 1}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`leading-relaxed ${isLegHeader ? 'font-black text-sm' : 'font-semibold'}`}>
+                        {st.instruction}
+                      </p>
+                      {!isLegHeader && st.distanceMeters > 0 && (
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Đoạn này: {st.distanceMeters >= 1000 ? `${(st.distanceMeters / 1000).toFixed(1)} km` : `${st.distanceMeters} m`}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-3 border-t border-slate-200 bg-white flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowTurnListModal(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

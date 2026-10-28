@@ -22,6 +22,7 @@ import {
   isCoordinateInVietnam,
   GeocodingResult,
   DEFAULT_VIETNAM_COORDS,
+  resolveCoordinatesFromAddress,
 } from '../services/geocodingService';
 
 // Custom Marker for Delivery Point
@@ -91,9 +92,30 @@ export const VietnamAddressMapPicker: React.FC<VietnamAddressMapPickerProps> = (
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
-  // Default coordinate in Vietnam
-  const validLat = isCoordinateInVietnam(lat, lng) ? lat! : DEFAULT_VIETNAM_COORDS.hcmc.lat;
-  const validLng = isCoordinateInVietnam(lat, lng) ? lng! : DEFAULT_VIETNAM_COORDS.hcmc.lng;
+  // Check if address specifies District 7 / Phú Thuận or known districts
+  const resolvedFromAddr = resolveCoordinatesFromAddress(address);
+  const addrLower = (address || '').toLowerCase();
+  const isQ7Address = addrLower.includes('phú thuận') || addrLower.includes('phu thuan') || addrLower.includes('q7') || addrLower.includes('quận 7') || addrLower.includes('q.7');
+
+  let validLat = DEFAULT_VIETNAM_COORDS.hcmc.lat;
+  let validLng = DEFAULT_VIETNAM_COORDS.hcmc.lng;
+
+  if (isQ7Address) {
+    if (!lat || lat > 10.765 || !isCoordinateInVietnam(lat, lng)) {
+      validLat = resolvedFromAddr?.lat || 10.7295;
+      validLng = resolvedFromAddr?.lng || 106.7350;
+    } else {
+      validLat = lat;
+      validLng = lng!;
+    }
+  } else if (isCoordinateInVietnam(lat, lng)) {
+    validLat = lat!;
+    validLng = lng!;
+  } else if (resolvedFromAddr) {
+    validLat = resolvedFromAddr.lat;
+    validLng = resolvedFromAddr.lng;
+  }
+
   const currentPos: [number, number] = [validLat, validLng];
 
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -116,11 +138,17 @@ export const VietnamAddressMapPicker: React.FC<VietnamAddressMapPickerProps> = (
   const handleAddressInputChange = (val: string) => {
     onAddressChange(val);
 
+    // If user types Phú Thuận / Q7 or known district, immediately pin to correct district coordinates
+    const quickResolved = resolveCoordinatesFromAddress(val);
+    if (quickResolved) {
+      onCoordinatesChange(quickResolved.lat, quickResolved.lng);
+    }
+
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
 
-    if (val.trim().length >= 3) {
+    if (val.trim().length >= 2) {
       setIsSearching(true);
       searchTimeoutRef.current = setTimeout(async () => {
         try {
@@ -132,7 +160,7 @@ export const VietnamAddressMapPicker: React.FC<VietnamAddressMapPickerProps> = (
         } finally {
           setIsSearching(false);
         }
-      }, 450);
+      }, 350);
     } else {
       setSuggestions([]);
       setShowSuggestions(false);

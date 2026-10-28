@@ -104,6 +104,27 @@
         "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["id", "name", "address", "lat", "lng"]
+    },
+    "DeliveryTrip": {
+      "title": "DeliveryTrip",
+      "description": "Multi-stop bundled delivery trips for shippers dispatching from warehouse",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "tripCode": { "type": "string", "maxLength": 64 },
+        "departureLocationName": { "type": "string", "maxLength": 256 },
+        "departureAddress": { "type": "string", "maxLength": 512 },
+        "departureLat": { "type": "number" },
+        "departureLng": { "type": "number" },
+        "shipperName": { "type": "string", "maxLength": 128 },
+        "shipperPhone": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["planning", "in_transit", "completed", "cancelled"] },
+        "totalDistanceKm": { "type": "number" },
+        "totalDurationMins": { "type": "number" },
+        "totalCodAmount": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "tripCode", "departureLocationName", "departureAddress", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -126,6 +147,10 @@
     "/departureLocations/{departureId}": {
       "schema": "DepartureLocation",
       "description": "Store warehouses and starting point locations for vehicle route planning"
+    },
+    "/deliveryTrips/{tripId}": {
+      "schema": "DeliveryTrip",
+      "description": "Multi-stop bundled delivery trips"
     }
   }
 }
