@@ -70,9 +70,37 @@ export const subscribeToStorage = (listener: StorageListener) => {
   };
 };
 
-const notifyListeners = () => {
+export const notifyListeners = () => {
   listeners.forEach((listener) => listener());
 };
+
+// Real-time synchronization event hooks
+export type EntityChangeHandler = (
+  entity: 'order' | 'product' | 'trip' | 'location',
+  action: 'save' | 'delete',
+  data: any
+) => void;
+
+let entityChangeHandler: EntityChangeHandler | null = null;
+
+export const setEntityChangeHandler = (handler: EntityChangeHandler) => {
+  entityChangeHandler = handler;
+};
+
+export const dispatchEntityChange = (
+  entity: 'order' | 'product' | 'trip' | 'location',
+  action: 'save' | 'delete',
+  data: any
+) => {
+  if (entityChangeHandler) {
+    try {
+      entityChangeHandler(entity, action, data);
+    } catch (e) {
+      console.warn('Realtime sync dispatcher warning:', e);
+    }
+  }
+};
+
 
 // Helper formatters
 export const formatVND = (amount: number): string => {
@@ -603,6 +631,7 @@ export const saveProduct = (
 
   localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
   notifyListeners();
+  dispatchEntityChange('product', 'save', savedProduct);
   return savedProduct;
 };
 
@@ -679,6 +708,7 @@ export const quickUpdateProductStockAndPrice = (
   products[index] = updatedProduct;
   localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
   notifyListeners();
+  dispatchEntityChange('product', 'save', updatedProduct);
   return updatedProduct;
 };
 
@@ -687,8 +717,10 @@ export const deleteProduct = (id: string): boolean => {
   const filtered = products.filter((p) => p.id !== id);
   localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(filtered));
   notifyListeners();
+  dispatchEntityChange('product', 'delete', id);
   return true;
 };
+
 
 /**
  * Export product list and price audit history to CSV
@@ -1008,6 +1040,7 @@ export const createOrder = (orderData: Omit<Order, 'id' | 'orderCode' | 'created
   localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
 
   notifyListeners();
+  dispatchEntityChange('order', 'save', newOrder);
   return newOrder;
 };
 
@@ -1104,6 +1137,7 @@ export const saveOrder = (
   localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
 
   notifyListeners();
+  dispatchEntityChange('order', 'save', updatedOrder);
   return updatedOrder;
 };
 
@@ -1163,6 +1197,7 @@ export const updateOrderDeliveryDetails = (
 
   localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
   notifyListeners();
+  dispatchEntityChange('order', 'save', orders[index]);
   return orders[index];
 };
 
@@ -1171,8 +1206,10 @@ export const deleteOrder = (orderId: string): boolean => {
   const filtered = orders.filter((o) => o.id !== orderId);
   localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(filtered));
   notifyListeners();
+  dispatchEntityChange('order', 'delete', orderId);
   return true;
 };
+
 
 // --- STORE INFO ---
 export const getStoreInfo = (): StoreInfo => {
@@ -1393,6 +1430,7 @@ export const saveDeliveryTrip = (
 
   localStorage.setItem(STORAGE_KEYS.DELIVERY_TRIPS, JSON.stringify(trips));
   notifyListeners();
+  dispatchEntityChange('trip', 'save', savedTrip);
   return savedTrip;
 };
 
@@ -1432,6 +1470,7 @@ export const deleteDeliveryTrip = (
   }
 
   notifyListeners();
+  dispatchEntityChange('trip', 'delete', id);
   return {
     success: true,
     tripCode: target.tripCode,
@@ -1439,6 +1478,7 @@ export const deleteDeliveryTrip = (
     revertedCount,
   };
 };
+
 
 export const updateDeliveryTripStatus = (
   id: string,

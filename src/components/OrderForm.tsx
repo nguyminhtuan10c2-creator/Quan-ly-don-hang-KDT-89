@@ -2000,7 +2000,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           </div>
 
           {/* STICKY BOTTOM ACTION BAR FOR MOBILE PHONES */}
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 p-3 shadow-2xl flex items-center justify-between gap-3">
+          <div className="md:hidden fixed bottom-16 left-0 right-0 z-30 bg-slate-950/98 backdrop-blur-md border-t border-slate-800 p-3 shadow-2xl flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center space-x-1.5 text-xs text-slate-300 truncate">
                 <span className="bg-blue-600 text-white font-black px-1.5 py-0.5 rounded text-[10px] shrink-0">
@@ -2017,7 +2017,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
             <button
               type="submit"
-              className="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-black px-4 py-2.5 rounded-xl shadow-lg shadow-blue-600/40 flex items-center space-x-1.5 transition-all shrink-0"
+              className="min-h-[44px] bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-black px-4 py-2.5 rounded-xl shadow-lg shadow-blue-600/40 flex items-center space-x-1.5 transition-all shrink-0"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>{editingOrder ? 'LƯU ĐƠN' : 'TẠO ĐƠN HÀNG'}</span>

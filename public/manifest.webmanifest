@@ -1,0 +1,25 @@
+{
+  "name": "KDT-89 OrderManager",
+  "short_name": "KDT-89",
+  "description": "Quản lý đơn hàng, điều phối giao hàng và kho hàng KDT-89 Logistics",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#1e3a8a",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"]
+}

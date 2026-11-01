@@ -11,6 +11,7 @@ import {
 } from './services/storageService';
 import { Header } from './components/Header';
 import { Navigation } from './components/Navigation';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { Dashboard } from './components/Dashboard';
 import { Inventory } from './components/Inventory';
 import { CategoryBrandManager } from './components/CategoryBrandManager';
@@ -23,6 +24,7 @@ import { DeliverySlip } from './components/DeliverySlip';
 import { OrderDetailModal } from './components/OrderDetailModal';
 import { DataManagementModal } from './components/DataManagementModal';
 import { DeliverySchedule } from './components/DeliverySchedule';
+import { initRealtimeFirestoreSync } from './services/firebaseService';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -39,7 +41,7 @@ export default function App() {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [isDataModalOpen, setIsDataModalOpen] = useState<boolean>(false);
 
-  // Sync state with local storage updates
+  // Sync state with local storage updates & Realtime Firestore sync (Mobile <-> Desktop)
   useEffect(() => {
     const refreshData = () => {
       setProducts(getProducts());
@@ -54,8 +56,16 @@ export default function App() {
 
     // Subscribe to storage changes
     const unsubscribe = subscribeToStorage(refreshData);
-    return () => unsubscribe();
+
+    // Subscribe to real-time Firestore synchronization between all devices
+    const unsubRealtime = initRealtimeFirestoreSync(refreshData);
+
+    return () => {
+      unsubscribe();
+      if (unsubRealtime) unsubRealtime();
+    };
   }, []);
+
 
   const pendingCount = orders.filter((o) => o.status === 'pending' || o.status === 'delivering').length;
   const lowStockCount = products.filter((p) => p.stock <= (p.minStockAlert || 5)).length;
@@ -80,14 +90,14 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans flex flex-col selection:bg-blue-500 selection:text-white">
+    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans flex flex-col selection:bg-blue-500 selection:text-white overflow-x-hidden w-full max-w-full">
       {/* Top Header */}
       <Header
         onNavigate={(tab) => setActiveTab(tab)}
         onOpenDataManagement={() => setIsDataModalOpen(true)}
       />
 
-      {/* Main Tab Navigation */}
+      {/* Main Tab Navigation (Desktop only) */}
       <Navigation
         activeTab={activeTab}
         onSelectTab={(tab) => setActiveTab(tab)}
@@ -96,8 +106,8 @@ export default function App() {
         unpaidDebtCount={unpaidDebtCount}
       />
 
-      {/* Main Content View */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Main Content View (Padded bottom for mobile navigation bar) */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-24 md:pb-6 overflow-x-hidden">
         {activeTab === 'dashboard' && (
           <Dashboard
             products={products}
@@ -206,9 +216,19 @@ export default function App() {
         />
       )}
 
-      {/* Simple Footer */}
-      <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 no-print">
-        <p>© 2026 OrderManager - Hệ thống Quản lý Đơn hàng, Tồn kho & Thưởng Kích hoạt Bảo hành</p>
+      {/* Mobile Sticky Bottom Navigation (Mobile screens < 768px: 360px-430px) */}
+      <MobileBottomNav
+        activeTab={activeTab}
+        onSelectTab={(tab) => setActiveTab(tab)}
+        pendingCount={pendingCount}
+        lowStockCount={lowStockCount}
+        unpaidDebtCount={unpaidDebtCount}
+        onOpenDataManagement={() => setIsDataModalOpen(true)}
+      />
+
+      {/* Simple Footer (Desktop only) */}
+      <footer className="hidden md:block bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 no-print">
+        <p>© 2026 OrderManager - Hệ thống Quản lý Đơn hàng, Tồn kho & Thưởng Kích hoạt Bảo hành KDT-89</p>
       </footer>
     </div>
   );

@@ -27,6 +27,7 @@ import {
   ChevronRight,
   CheckCircle2,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 import { Product, CategoryItem, BrandItem, PriceChangeRecord } from '../types';
 import {
@@ -45,6 +46,8 @@ import {
   exportProductPriceAuditAsCsv,
   reloadInventoryFromReport,
 } from '../services/storageService';
+import { DistributorReceiptScannerModal } from './DistributorReceiptScannerModal';
+
 
 interface InventoryProps {
   products: Product[];
@@ -90,6 +93,7 @@ export const Inventory: React.FC<InventoryProps> = ({
 
   // Sync Toast State
   const [syncSuccessToast, setSyncSuccessToast] = useState<string | null>(null);
+  const [isReceiptScannerOpen, setIsReceiptScannerOpen] = useState(false);
 
   // Full Add/Edit Product Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -429,6 +433,17 @@ export const Inventory: React.FC<InventoryProps> = ({
           )}
 
           <button
+            type="button"
+            onClick={() => setIsReceiptScannerOpen(true)}
+            className="bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center space-x-2 shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            title="Kéo thả hoặc chụp ảnh phiếu nhập hàng từ nhà phân phối để AI tự động trích xuất mã và nhập kho"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>Nhập hàng AI (Chụp Phiếu)</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleOpenAddModal}
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center space-x-2 shadow-md shadow-blue-500/20 transition-all hover:scale-[1.01]"
           >
@@ -1786,6 +1801,18 @@ export const Inventory: React.FC<InventoryProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* AI Distributor Receipt Scanner Modal */}
+      {isReceiptScannerOpen && (
+        <DistributorReceiptScannerModal
+          isOpen={isReceiptScannerOpen}
+          onClose={() => setIsReceiptScannerOpen(false)}
+          onImportComplete={(count, total) => {
+            setSyncSuccessToast(`Đã nhập kho thành công ${count} sản phẩm với tổng giá trị ${formatVND(total)}!`);
+            setTimeout(() => setSyncSuccessToast(null), 5000);
+          }}
+        />
       )}
     </div>
   );

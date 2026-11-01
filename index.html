@@ -2,8 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OrderManager - Quản lý Đơn hàng & Giao hàng</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>KDT-89 OrderManager - Quản lý Đơn hàng & Giao hàng</title>
+    <meta name="description" content="Quản lý đơn hàng, điều phối giao hàng và kho hàng KDT-89 Logistics" />
+    <meta property="og:title" content="KDT-89 OrderManager" />
+    <meta property="og:description" content="Quản lý đơn hàng, điều phối giao hàng và kho hàng KDT-89 Logistics" />
+    <meta name="theme-color" content="#1e3a8a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="KDT-89 OrderManager" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="apple-touch-icon" href="/pwa-192x192.png" />
     <!-- Leaflet Map CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
     <script>
@@ -24,6 +34,12 @@
           // Ignore
         }
       })();
+
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js').catch(function() {});
+        });
+      }
     </script>
   </head>
   <body>

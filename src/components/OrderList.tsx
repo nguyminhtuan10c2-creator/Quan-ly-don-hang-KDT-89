@@ -16,6 +16,7 @@ import {
   ChevronRight,
   UserCheck,
   Edit,
+  Phone,
 } from 'lucide-react';
 import { Order, OrderStatus } from '../types';
 import {
@@ -223,8 +224,188 @@ export const OrderList: React.FC<OrderListProps> = ({
         </div>
       </div>
 
-      {/* Orders Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      {/* MOBILE VIEW: Vertical Order Cards (Visible on screens < 768px, optimized for 360px-430px) */}
+      <div className="block md:hidden space-y-3">
+        {filteredOrders.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400 text-xs">
+            Không tìm thấy đơn hàng nào khớp với tìm kiếm.
+          </div>
+        ) : (
+          filteredOrders.map((order) => {
+            const isCompleted = order.status === 'completed' || order.status === 'delivered';
+            const isDelivering = order.status === 'delivering' || order.status === 'in_transit';
+            const isPending = order.status === 'pending' || order.status === 'pending_pickup';
+
+            const statusLabel =
+              isCompleted ? 'Giao thành công' :
+              isDelivering ? 'Đang giao hàng' :
+              isPending ? 'Chờ lấy hàng' :
+              order.status === 'failed' ? 'Giao thất bại' :
+              order.status === 'cancelled' ? 'Đã hủy' : order.status;
+
+            const statusBadgeClass =
+              isCompleted ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+              isDelivering ? 'bg-blue-100 text-blue-800 border-blue-300' :
+              isPending ? 'bg-amber-100 text-amber-800 border-amber-300' :
+              'bg-slate-100 text-slate-700 border-slate-300';
+
+            return (
+              <div
+                key={order.id}
+                className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3 hover:border-blue-300 transition-all"
+              >
+                {/* 1. Card Top: Order Code, Time & Status */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => onSelectOrderForDetail(order)}
+                      className="font-black text-xs text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-xl border border-blue-200 transition-colors shrink-0"
+                    >
+                      {order.orderCode}
+                    </button>
+                    <span className="text-[10px] text-slate-400 font-medium truncate">
+                      {formatDateVI(order.createdAt)}
+                    </span>
+                  </div>
+
+                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${statusBadgeClass}`}>
+                    {statusLabel}
+                  </span>
+                </div>
+
+                {/* 2. Customer Info & Quick Phone Call */}
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-extrabold text-xs text-slate-900 truncate">{order.customerName}</p>
+                      <p className="text-[10px] text-slate-400">
+                        NV Bán: <span className="font-bold text-slate-700">{order.employeeId}</span>
+                      </p>
+                    </div>
+
+                    <a
+                      href={`tel:${order.customerPhone}`}
+                      className="min-h-[44px] min-w-[44px] px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs shrink-0 active:scale-95 transition-transform"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
+                      <span className="font-mono">{order.customerPhone}</span>
+                    </a>
+                  </div>
+
+                  {order.deliveryAddress && (
+                    <div className="flex items-start justify-between gap-2 pt-1 border-t border-slate-200/60 text-xs text-slate-600">
+                      <div className="flex items-start space-x-1.5 min-w-0 flex-1">
+                        <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                        <span className="text-[11px] leading-tight line-clamp-2 text-slate-700">
+                          {order.deliveryAddress}
+                        </span>
+                      </div>
+                      <a
+                        href={getGoogleMapsDirectionsUrl(storeLat, storeLng, order.deliveryLat, order.deliveryLng)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 shrink-0 shadow-xs"
+                        title="Chỉ đường Google Maps"
+                      >
+                        <Navigation className="w-4 h-4" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Delivery Schedule & Assigned Shipper */}
+                <div className="flex items-center justify-between text-xs px-1 text-slate-600">
+                  <div className="flex items-center space-x-1.5 min-w-0">
+                    <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span className="text-[11px] font-semibold text-slate-800 truncate">
+                      {formatDateVI(order.deliveryDate)} ({order.deliveryTime})
+                    </span>
+                  </div>
+                  <div className="text-[11px] shrink-0">
+                    <span className="text-slate-400">Shipper: </span>
+                    <span className="font-bold text-blue-800 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded text-[10px]">
+                      {order.deliveryStaffName || 'Chưa phân công'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 4. Financial Totals */}
+                <div className="flex items-baseline justify-between pt-2 border-t border-slate-100 px-1">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-medium">Tổng tiền đơn</span>
+                    <span className="text-sm font-black text-slate-900">{formatVND(order.totalAmount)}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400 block font-medium">Thu COD / Nợ</span>
+                    <span
+                      className={`text-xs font-black ${
+                        (order.remainingAmount || 0) > 0 ? 'text-amber-600' : 'text-emerald-600'
+                      }`}
+                    >
+                      {(order.remainingAmount || 0) > 0 ? formatVND(order.remainingAmount || 0) : 'Đã thu đủ (0đ)'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 5. Mobile Action Buttons (All min-h-[44px]) */}
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => onSelectOrderForSlip(order)}
+                    className="min-h-[44px] bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-extrabold text-xs rounded-xl flex items-center justify-center space-x-1 shadow-xs transition-transform"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>In phiếu</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onSelectOrderForDetail(order)}
+                    className="min-h-[44px] bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 font-bold text-xs rounded-xl flex items-center justify-center space-x-1 border border-slate-200 transition-colors"
+                  >
+                    <Eye className="w-4 h-4 text-slate-600" />
+                    <span>Chi tiết</span>
+                  </button>
+
+                  {onEditOrder && (
+                    <button
+                      type="button"
+                      onClick={() => onEditOrder(order)}
+                      className="min-h-[44px] bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-900 font-bold text-xs rounded-xl flex items-center justify-center space-x-1 border border-amber-200 transition-colors"
+                    >
+                      <Edit className="w-4 h-4 text-amber-700" />
+                      <span>Sửa đơn</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* 6. Quick Status Update Dropdown for Mobile */}
+                <div className="pt-1">
+                  <select
+                    value={
+                      order.status === 'pending' ? 'pending_pickup' :
+                      order.status === 'delivering' ? 'in_transit' :
+                      order.status === 'completed' ? 'delivered' : order.status
+                    }
+                    onChange={(e) => handleStatusChange(order.id, e.target.value as OrderStatus)}
+                    className="w-full min-h-[44px] px-3 py-2 text-xs font-bold rounded-xl border border-slate-300 bg-slate-50 text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="pending_pickup">Chờ lấy hàng (Pending Pickup)</option>
+                    <option value="in_transit">Đang giao hàng (In Transit)</option>
+                    <option value="delivered">Giao thành công (Delivered)</option>
+                    <option value="failed">Giao thất bại (Delivery Failed)</option>
+                    <option value="cancelled">Đã hủy (Cancelled)</option>
+                  </select>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Orders Table (Desktop) */}
+      <div className="hidden md:block bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
