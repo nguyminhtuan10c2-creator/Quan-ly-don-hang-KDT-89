@@ -17,6 +17,7 @@ import {
   DollarSign,
   CreditCard,
   Receipt,
+  ClipboardList,
 } from 'lucide-react';
 import { Product, Order, EmployeeBonusSummary } from '../types';
 import { formatVND, formatDateVI } from '../services/storageService';
@@ -74,24 +75,40 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-2.5">
           <button
             type="button"
+            onClick={() => onNavigate('orders')}
+            className="min-h-[44px] bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
+          >
+            <ClipboardList className="w-4 h-4 text-blue-400" />
+            <span>Đơn hàng</span>
+          </button>
+          <button
+            type="button"
             onClick={() => onNavigate('create-order')}
-            className="min-h-[44px] bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 shadow-lg shadow-blue-600/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            className="min-h-[44px] bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 shadow-lg shadow-blue-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Lên đơn mới</span>
           </button>
           <button
             type="button"
+            onClick={() => onNavigate('inventory')}
+            className="min-h-[44px] bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+          >
+            <Warehouse className="w-4 h-4" />
+            <span>Kho hàng</span>
+          </button>
+          <button
+            type="button"
             onClick={() => onNavigate('delivery-schedule')}
-            className="min-h-[44px] bg-sky-600 hover:bg-sky-500 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-sky-600/20 transition-all"
+            className="min-h-[44px] bg-sky-600 hover:bg-sky-500 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-sky-600/20 transition-all cursor-pointer"
           >
             <Truck className="w-4 h-4" />
-            <span>Lịch giao hàng</span>
+            <span>Lịch giao</span>
           </button>
           <button
             type="button"
             onClick={() => onNavigate('revenue-report')}
-            className="min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-600/20 transition-all"
+            className="min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
           >
             <TrendingUp className="w-4 h-4" />
             <span>Doanh thu</span>
@@ -99,7 +116,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <button
             type="button"
             onClick={() => onNavigate('debt-management')}
-            className="min-h-[44px] bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-amber-600/20 transition-all"
+            className="min-h-[44px] bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-amber-600/20 transition-all cursor-pointer"
           >
             <CreditCard className="w-4 h-4" />
             <span>Công nợ</span>

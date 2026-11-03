@@ -105,7 +105,7 @@ export const OrderList: React.FC<OrderListProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-extrabold text-slate-900 flex items-center space-x-2">
             <ClipboardList className="w-6 h-6 text-blue-600" />

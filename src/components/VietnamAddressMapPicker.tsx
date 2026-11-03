@@ -86,7 +86,13 @@ export const VietnamAddressMapPicker: React.FC<VietnamAddressMapPickerProps> = (
   lng,
   onCoordinatesChange,
 }) => {
-  const [showMap, setShowMap] = useState<boolean>(true);
+  // Default map to collapsed on mobile to keep order creation ultra fast and compact
+  const [showMap, setShowMap] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 768;
+    }
+    return false;
+  });
   const [suggestions, setSuggestions] = useState<GeocodingResult[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);

@@ -31,6 +31,7 @@ import {
   ArrowRight,
   CornerDownLeft,
   Building2,
+  Truck,
 } from 'lucide-react';
 import { Product, OrderItem, OrderStatus, Order, DepartureLocation } from '../types';
 import {
@@ -806,25 +807,25 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               </div>
             </div>
 
-            {/* 2. Vị Trí Đầu: Điểm Xuất Phát (Kho Hàng) */}
-            <div className="bg-white p-5 rounded-2xl border-2 border-blue-500/20 shadow-xs space-y-3 relative z-0">
+            {/* 2. Điểm Xuất Phát (Kho Hàng) - Hiển thị đầy đủ trên Desktop, trên Mobile rút gọn 1 dòng */}
+            <div className="hidden md:block bg-white p-5 rounded-2xl border-2 border-blue-500/20 shadow-xs space-y-3 relative z-0">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
                 <div className="flex items-center space-x-2">
                   <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center">
                     <Building2 className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-slate-900 text-sm">2. Vị Trí Đầu: Điểm Xuất Phát (Kho Hàng)</h3>
+                    <h3 className="font-extrabold text-slate-900 text-sm">Kho Xuất Phát (Vị Trí Đầu)</h3>
                     <p className="text-[11px] text-slate-500">Nơi lấy hàng xuất phát & tính cự ly vận chuyển</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsDepartureModalOpen(true)}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl border border-blue-200 transition-colors flex items-center space-x-1"
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl border border-blue-200 transition-colors flex items-center space-x-1 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>+ Thêm / Quản lý điểm xuất phát</span>
+                  <span>+ Quản lý điểm xuất phát</span>
                 </button>
               </div>
 
@@ -869,15 +870,35 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               </div>
             </div>
 
-            {/* 3. Vị Trí Cuối: Customer Info Section */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 relative z-0">
+            {/* Mobile-only compact warehouse strip (Tiết kiệm tối đa diện tích màn hình điện thoại) */}
+            <div className="md:hidden bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between text-xs shadow-xs">
+              <div className="flex items-center space-x-2 min-w-0">
+                <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+                <div className="min-w-0 truncate">
+                  <span className="text-slate-500 text-[11px]">Kho lấy hàng: </span>
+                  <span className="font-bold text-slate-900 truncate">
+                    {departureLocations.find((d) => d.id === selectedDepartureId)?.name || defaultDeparture.name}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDepartureModalOpen(true)}
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 shrink-0 ml-2"
+              >
+                Đổi
+              </button>
+            </div>
+
+            {/* 2. Customer Info Section */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 relative z-0">
               <div className="flex items-center space-x-2 border-b border-slate-100 pb-3">
                 <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
                   <User className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-slate-900 text-sm">3. Vị Trí Cuối: Khách Hàng & Điểm Giao Hàng</h3>
-                  <p className="text-[11px] text-slate-500">Định vị điểm đến của khách trên bản đồ Việt Nam</p>
+                  <h3 className="font-extrabold text-slate-900 text-sm">2. Khách Hàng & Nơi Giao Hàng</h3>
+                  <p className="text-[11px] text-slate-500">Tên, số điện thoại và địa chỉ nhận hàng của khách</p>
                 </div>
               </div>
 
@@ -1806,12 +1827,12 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           </div>
 
           {/* Right Column (1 Col): Delivery Scheduling & Summary */}
-          <div className="space-y-6 lg:sticky lg:top-6 self-start">
-            {/* Delivery Scheduler */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 relative z-0">
+          <div className="space-y-6 lg:sticky lg:top-[124px] self-start">
+            {/* Desktop-only Full Delivery Scheduler & Dispatch */}
+            <div className="hidden md:block bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 relative z-0">
               <div className="flex items-center space-x-2 border-b border-slate-100 pb-3">
                 <Calendar className="w-5 h-5 text-blue-600" />
-                <h3 className="font-extrabold text-slate-900 text-sm">4. Lịch Giao Hàng (Schedule)</h3>
+                <h3 className="font-extrabold text-slate-900 text-sm">3. Lịch Giao Hàng & Phân Công Shipper</h3>
               </div>
 
               <div>
@@ -1842,7 +1863,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nhân viên Giao hàng (Shipper Assignment) *
+                  Nhân viên Giao hàng (Shipper Assignment)
                 </label>
                 <select
                   value={deliveryStaffId}
@@ -1878,7 +1899,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Ghi chú đơn hàng</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Ghi chú đơn hàng & Dặn dò giao</label>
                 <textarea
                   rows={2}
                   placeholder="Yêu cầu riêng của khách hàng..."
@@ -1889,10 +1910,78 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               </div>
             </div>
 
+            {/* Mobile-optimized Schedule & Customer Note (Gọn nhẹ, chỉ tập trung vào việc hẹn khách) */}
+            <div className="md:hidden bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3 relative z-0">
+              <div className="flex items-center space-x-2 border-b border-slate-100 pb-2.5">
+                <Calendar className="w-4 h-4 text-blue-600" />
+                <h3 className="font-extrabold text-slate-900 text-xs">Hẹn Ngày Giao & Dặn Dò Của Khách</h3>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">Ngày hẹn giao hàng:</label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryDate(todayStr)}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-colors ${
+                        deliveryDate === todayStr
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      Hôm nay
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const tmr = new Date();
+                        tmr.setDate(tmr.getDate() + 1);
+                        setDeliveryDate(tmr.toISOString().split('T')[0]);
+                      }}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-colors ${
+                        deliveryDate !== todayStr
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      Ngày mai
+                    </button>
+                  </div>
+                </div>
+                <input
+                  type="date"
+                  required
+                  value={deliveryDate}
+                  onChange={(e) => setDeliveryDate(e.target.value)}
+                  className="w-full min-h-[44px] text-xs px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Ghi chú của khách hàng (nếu có)</label>
+                <textarea
+                  rows={2}
+                  placeholder="VD: Khách dặn giao sau 5h chiều, gọi trước khi đến, kiểm tra máy..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="w-full text-xs px-3.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                ></textarea>
+              </div>
+
+              {/* Informative dispatch note */}
+              <div className="bg-blue-50/80 border border-blue-200 p-2.5 rounded-xl text-[11px] text-blue-900 flex items-start space-x-2">
+                <Truck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <p>
+                  Tài xế Shipper & tuyến đường giao sẽ được điều phối tự động bên tab <strong>Giao hàng</strong>.
+                </p>
+              </div>
+            </div>
+
             {/* Order Value & Financial Summary */}
             <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-xl border border-slate-800 space-y-4 relative z-0">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <h3 className="font-extrabold text-sm text-white">5. Tổng kết & Thanh toán COD</h3>
+                <h3 className="font-extrabold text-sm text-white">4. Thanh Toán & Chốt Đơn (COD)</h3>
                 {editingOrder && (
                   <span className="bg-amber-500 text-slate-950 text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
                     Chỉnh sửa đơn
@@ -1914,7 +2003,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                     placeholder="VD: 30000"
                     value={shippingFee || ''}
                     onChange={(e) => setShippingFee(Math.max(0, Number(e.target.value)))}
-                    className="w-full text-xs px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl font-extrabold text-blue-300 focus:ring-2 focus:ring-blue-500"
+                    className="w-full min-h-[44px] text-xs px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl font-extrabold text-blue-300 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
@@ -1930,7 +2019,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                     placeholder="VD: 500000"
                     value={prepaidAmount || ''}
                     onChange={(e) => setPrepaidAmount(Math.max(0, Number(e.target.value)))}
-                    className="w-full text-xs px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl font-extrabold text-emerald-300 focus:ring-2 focus:ring-emerald-500"
+                    className="w-full min-h-[44px] text-xs px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl font-extrabold text-emerald-300 focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
               </div>

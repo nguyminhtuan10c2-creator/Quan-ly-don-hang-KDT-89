@@ -51,28 +51,28 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenDataManagement
 
   return (
     <>
-      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 no-print overflow-x-hidden">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14 sm:h-16">
+      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 no-print h-14 sm:h-16 shrink-0 overflow-x-hidden">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-full">
+          <div className="flex items-center justify-between h-full">
             {/* Logo & Store Title */}
             <div className="flex items-center space-x-2 sm:space-x-3 cursor-pointer shrink-0" onClick={() => onNavigate('dashboard')}>
-              <div className="h-9 w-9 sm:h-11 sm:w-auto bg-white/10 p-1 rounded-xl border border-slate-700/60 shadow-lg flex items-center justify-center overflow-hidden shrink-0">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 bg-white/10 p-1 rounded-xl border border-slate-700/60 shadow-lg flex items-center justify-center overflow-hidden shrink-0">
                 <img
                   src="/assets/aistudio/logo_Cty_KDT-10_d91b9dae.png"
                   alt="KDT-89 Logo"
-                  className="h-7 w-7 sm:h-9 sm:w-auto object-contain"
+                  className="h-7 w-7 sm:h-8 sm:w-8 object-contain"
                 />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center space-x-1.5">
-                  <span className="font-extrabold text-sm sm:text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-amber-200 bg-clip-text text-transparent truncate">
+                  <span className="font-extrabold text-sm sm:text-base lg:text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-amber-200 bg-clip-text text-transparent truncate">
                     KDT-89 <span className="hidden sm:inline">Logistics</span>
                   </span>
-                  <span className="hidden md:inline bg-amber-500/20 text-amber-300 text-[10px] sm:text-xs px-2 py-0.5 rounded-full border border-amber-500/30 font-medium shrink-0">
+                  <span className="hidden lg:inline bg-amber-500/20 text-amber-300 text-[10px] sm:text-xs px-2 py-0.5 rounded-full border border-amber-500/30 font-medium shrink-0">
                     dienmaykdt89.com
                   </span>
                 </div>
-                <p className="hidden sm:flex text-xs text-slate-400 items-center truncate">
+                <p className="hidden xl:flex text-xs text-slate-400 items-center truncate">
                   <Store className="w-3 h-3 inline mr-1 text-slate-400 shrink-0" />
                   <span className="truncate">{storeInfo.name}</span>
                 </p>
@@ -80,14 +80,14 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenDataManagement
             </div>
 
             {/* Quick Actions & Staff Profile */}
-            <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
+            <div className="flex items-center space-x-1.5 sm:space-x-2.5 shrink-0">
               {/* Firebase Cloud Sync Button */}
               <button
                 type="button"
                 onClick={handleQuickCloudSync}
                 disabled={syncStatus.isSyncing}
                 title={`Đồng bộ cơ sở dữ liệu Firebase Cloud${syncStatus.lastSyncedAt ? ' - Lần cuối: ' + syncStatus.lastSyncedAt : ''}`}
-                className="flex items-center space-x-1 sm:space-x-1.5 text-xs font-bold text-amber-300 hover:text-white bg-amber-950/70 hover:bg-amber-900/90 px-2 sm:px-3 py-1.5 rounded-xl border border-amber-700/60 transition-colors shadow-xs"
+                className="flex items-center space-x-1 sm:space-x-1.5 text-xs font-bold text-amber-300 hover:text-white bg-amber-950/70 hover:bg-amber-900/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-700/60 transition-colors shadow-xs shrink-0 cursor-pointer"
               >
                 {syncStatus.isSyncing ? (
                   <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
@@ -109,11 +109,11 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenDataManagement
                   type="button"
                   onClick={onOpenDataManagement}
                   title="Nạp dữ liệu đơn hàng cũ & Quản lý dung lượng"
-                  className="hidden sm:flex items-center space-x-1.5 text-xs font-bold text-blue-300 hover:text-white bg-blue-950/80 hover:bg-blue-900 px-3 py-1.5 rounded-xl border border-blue-800/80 transition-colors shadow-xs"
+                  className="hidden md:flex items-center space-x-1.5 text-xs font-bold text-blue-300 hover:text-white bg-blue-950/80 hover:bg-blue-900 px-2.5 py-1.5 rounded-xl border border-blue-800/80 transition-colors shadow-xs shrink-0 cursor-pointer"
                 >
                   <Database className="w-3.5 h-3.5 text-blue-400" />
-                  <span className="hidden md:inline">Nạp & Quản lý Data</span>
-                  <span className="md:hidden">Data</span>
+                  <span className="hidden xl:inline">Nạp & Quản lý Data</span>
+                  <span className="xl:hidden">Data</span>
                 </button>
               )}
 
@@ -122,7 +122,7 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenDataManagement
                 type="button"
                 onClick={handleReset}
                 title="Khôi phục dữ liệu thử nghiệm ban đầu"
-                className="hidden lg:flex items-center space-x-1 text-xs text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700/60 transition-colors"
+                className="hidden xl:flex items-center space-x-1 text-xs text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700/60 transition-colors shrink-0 cursor-pointer"
               >
                 <RefreshCw className="w-3 h-3" />
                 <span>Reset</span>
@@ -132,7 +132,7 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenDataManagement
               <button
                 type="button"
                 onClick={() => setIsStaffModalOpen(true)}
-                className="flex items-center space-x-1.5 sm:space-x-3 bg-slate-800 hover:bg-slate-700/80 border border-slate-700 rounded-xl px-2 sm:px-3 py-1 sm:py-1.5 transition-all text-left group"
+                className="flex items-center space-x-1.5 sm:space-x-2 bg-slate-800 hover:bg-slate-700/80 border border-slate-700 rounded-xl px-2 sm:px-2.5 py-1 transition-all text-left group shrink-0 cursor-pointer"
               >
                 <div className="relative shrink-0">
                   {activeStaff.avatar ? (
@@ -151,10 +151,10 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenDataManagement
 
                 <div className="hidden sm:block">
                   <div className="flex items-center space-x-1.5">
-                    <span className="text-xs font-bold text-blue-400 bg-blue-950/80 px-1.5 py-0.2 rounded border border-blue-800/60">
+                    <span className="text-xs font-bold text-blue-400 bg-blue-950/80 px-1 py-0.2 rounded border border-blue-800/60">
                       {activeStaff.employeeId}
                     </span>
-                    <span className="text-xs font-semibold text-white group-hover:text-blue-200 transition-colors">
+                    <span className="text-xs font-semibold text-white group-hover:text-blue-200 transition-colors max-w-[100px] lg:max-w-[130px] truncate">
                       {activeStaff.employeeName}
                     </span>
                   </div>

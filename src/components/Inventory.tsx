@@ -44,7 +44,6 @@ import {
   saveBrand,
   quickUpdateProductStockAndPrice,
   exportProductPriceAuditAsCsv,
-  reloadInventoryFromReport,
 } from '../services/storageService';
 import { DistributorReceiptScannerModal } from './DistributorReceiptScannerModal';
 
@@ -388,7 +387,7 @@ export const Inventory: React.FC<InventoryProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
           <h2 className="text-xl font-extrabold text-slate-900 flex items-center space-x-2">
             <Package className="w-6 h-6 text-blue-600" />
@@ -400,19 +399,6 @@ export const Inventory: React.FC<InventoryProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => {
-              reloadInventoryFromReport();
-              setSyncSuccessToast('Đã nạp thành công 328 sản phẩm tồn kho từ file 13/10/2026 thuộc 6 nhóm yêu cầu!');
-              setTimeout(() => setSyncSuccessToast(null), 5000);
-            }}
-            className="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-center space-x-1.5 transition-all shadow-xs"
-            title="Khôi phục / Nạp lại danh mục 328 sản phẩm chuẩn từ file TON_13-101.csv"
-          >
-            <RefreshCw className="w-4 h-4 text-sky-600" />
-            <span>Nạp file tồn 13/10 (328 SP)</span>
-          </button>
-
           <button
             onClick={() => exportProductPriceAuditAsCsv(filteredProducts)}
             className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-center space-x-1.5 transition-all shadow-xs"
