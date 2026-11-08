@@ -636,7 +636,7 @@ export const PriceHubSuppliers: React.FC<PriceHubSuppliersProps> = ({
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-50">
-                                {sq.items.map((it, idx) => (
+                                {(sq.items || []).map((it, idx) => (
                                   <tr key={idx} className="hover:bg-slate-50">
                                     <td className="py-1.5 font-medium text-slate-800">
                                       {it.productName}

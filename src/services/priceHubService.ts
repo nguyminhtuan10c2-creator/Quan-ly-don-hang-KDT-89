@@ -599,7 +599,11 @@ export const getQuotations = (): SupplierQuotation[] => {
     return SEED_QUOTATIONS;
   }
   try {
-    return JSON.parse(stored);
+    const list: SupplierQuotation[] = JSON.parse(stored);
+    return list.map((q) => ({
+      ...q,
+      items: Array.isArray(q.items) ? q.items : [],
+    }));
   } catch {
     return SEED_QUOTATIONS;
   }

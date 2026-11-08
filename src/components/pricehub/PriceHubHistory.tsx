@@ -90,7 +90,7 @@ export const PriceHubHistory: React.FC<PriceHubHistoryProps> = ({
           !qTerm ||
           q.supplierName.toLowerCase().includes(qTerm) ||
           (q.supplierCode && q.supplierCode.toLowerCase().includes(qTerm)) ||
-          q.items.some(
+          (q.items || []).some(
             (it) =>
               it.productName.toLowerCase().includes(qTerm) ||
               (it.productModel && it.productModel.toLowerCase().includes(qTerm))
@@ -105,7 +105,7 @@ export const PriceHubHistory: React.FC<PriceHubHistoryProps> = ({
   // Open Edit with audit modal
   const handleOpenEdit = (quote: SupplierQuotation) => {
     setEditingQuotation(quote);
-    setModifiedItems(JSON.parse(JSON.stringify(quote.items)));
+    setModifiedItems(JSON.parse(JSON.stringify(quote.items || [])));
     setModifiedNotes(quote.notes || '');
     setEditReason('Nhà cung cấp đính chính lại giá chiết khấu');
     setEditorName('Sale KDT');
@@ -166,7 +166,7 @@ export const PriceHubHistory: React.FC<PriceHubHistoryProps> = ({
     let csv = `Mã đợt,Ngày báo giá,Nhà cung cấp,Mã NPP,Người hỏi,Tên sản phẩm,Model,Giá báo NPP,Chiết khấu %,Giá Net,Tình trạng,Ghi chú\n`;
 
     filteredQuotations.forEach((q) => {
-      q.items.forEach((it) => {
+      (q.items || []).forEach((it) => {
         csv += `"${q.id}","${formatDateTimeVI(q.quoteDate)}","${q.supplierName}","${
           q.supplierCode || ''
         }","${q.createdBy}","${it.productName}","${it.productModel || ''}",${it.quotedPrice},${
@@ -355,7 +355,7 @@ export const PriceHubHistory: React.FC<PriceHubHistoryProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {q.items.map((it, idx) => (
+                    {(q.items || []).map((it, idx) => (
                       <tr key={idx} className="hover:bg-purple-50/20">
                         <td className="py-2 px-2 font-bold text-slate-800">{it.productName}</td>
                         <td className="py-2 px-2 font-mono text-[11px] text-purple-700">

@@ -122,7 +122,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   const [notes, setNotes] = useState(editingOrder ? editingOrder.notes || '' : '');
 
   // Selected Order Items
-  const [selectedItems, setSelectedItems] = useState<OrderItem[]>(editingOrder ? editingOrder.items : []);
+  const [selectedItems, setSelectedItems] = useState<OrderItem[]>(editingOrder ? (editingOrder.items || []) : []);
 
   // Shipping Fee & Down Payment / Prepaid Amount
   const [shippingFee, setShippingFee] = useState<number>(editingOrder?.shippingFee || 0);

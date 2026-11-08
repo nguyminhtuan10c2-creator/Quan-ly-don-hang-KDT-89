@@ -283,7 +283,15 @@ export async function pullFromFirebase(): Promise<{ success: boolean; ordersCoun
     const ordersSnap = await getDocs(collection(db, 'orders'));
     const remoteOrders: Order[] = [];
     ordersSnap.forEach((docSnap) => {
-      remoteOrders.push(docSnap.data() as Order);
+      const data = docSnap.data() as any;
+      if (data && data.id) {
+        remoteOrders.push({
+          ...data,
+          items: Array.isArray(data.items) ? data.items : [],
+          deliveryLogs: Array.isArray(data.deliveryLogs) ? data.deliveryLogs : [],
+          paymentLogs: Array.isArray(data.paymentLogs) ? data.paymentLogs : [],
+        } as Order);
+      }
     });
 
     if (remoteOrders.length > 0) {
@@ -503,9 +511,14 @@ export function initRealtimeFirestoreSync(onDataChange?: () => void) {
       if (snapshot.empty) return;
       const remoteOrders: Order[] = [];
       snapshot.forEach((docSnap) => {
-        const data = docSnap.data() as Order;
+        const data = docSnap.data() as any;
         if (data && data.id && data.orderCode) {
-          remoteOrders.push(data);
+          remoteOrders.push({
+            ...data,
+            items: Array.isArray(data.items) ? data.items : [],
+            deliveryLogs: Array.isArray(data.deliveryLogs) ? data.deliveryLogs : [],
+            paymentLogs: Array.isArray(data.paymentLogs) ? data.paymentLogs : [],
+          } as Order);
         }
       });
       if (remoteOrders.length > 0) {

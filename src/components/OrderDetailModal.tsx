@@ -469,7 +469,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
           {/* Ordered Products Table */}
           <div>
-            <h4 className="font-extrabold text-slate-900 mb-2">Sản phẩm trong đơn ({currentOrder.items.length})</h4>
+            <h4 className="font-extrabold text-slate-900 mb-2">Sản phẩm trong đơn ({(currentOrder.items || []).length})</h4>
             <div className="border border-slate-200 rounded-xl overflow-hidden">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -482,7 +482,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {currentOrder.items.map((item, idx) => (
+                  {(currentOrder.items || []).map((item, idx) => (
                     <tr key={idx}>
                       <td className="py-2.5 px-3">
                         <p className="font-extrabold text-slate-900">{item.productName}</p>

@@ -1031,6 +1031,7 @@ export const getOrders = (): Order[] => {
 
         return {
           ...o,
+          items: Array.isArray(o.items) ? o.items : [],
           subtotal,
           shippingFee,
           totalAmount,
@@ -1117,7 +1118,8 @@ export const createOrder = (orderData: Omit<Order, 'id' | 'orderCode' | 'created
   const orderCode = getNextOrderCodeForEmployee(orderData.employeeId);
 
   // Calculate totals and financial metrics
-  const itemsSubtotal = orderData.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const safeOrderItems = Array.isArray(orderData.items) ? orderData.items : [];
+  const itemsSubtotal = safeOrderItems.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0);
   const shippingFee = orderData.shippingFee || 0;
   const prepaidAmount = orderData.prepaidAmount || 0;
   const totalAmount = itemsSubtotal + shippingFee;
@@ -1125,9 +1127,9 @@ export const createOrder = (orderData: Omit<Order, 'id' | 'orderCode' | 'created
 
   // Calculate total bonus earned
   let totalBonusEarned = 0;
-  orderData.items.forEach((item) => {
-    if (item.isWarrantyActivated) {
-      totalBonusEarned += (item.activationBonusAmount || 0) * item.quantity;
+  safeOrderItems.forEach((item) => {
+    if (item && item.isWarrantyActivated) {
+      totalBonusEarned += (item.activationBonusAmount || 0) * (item.quantity || 1);
     }
   });
 
@@ -1178,6 +1180,7 @@ export const createOrder = (orderData: Omit<Order, 'id' | 'orderCode' | 'created
     deliveryLng: typeof safeDeliveryLng === 'number' && Number.isFinite(safeDeliveryLng) && isCoordinateInVietnam(safeDeliveryLat, safeDeliveryLng)
       ? safeDeliveryLng
       : (resolvedFromAddr?.lng || 106.7218),
+    items: safeOrderItems,
     subtotal: itemsSubtotal,
     shippingFee,
     prepaidAmount,
@@ -1191,7 +1194,7 @@ export const createOrder = (orderData: Omit<Order, 'id' | 'orderCode' | 'created
 
   // Deduct stock for each item in the created order automatically!
   const updatedProducts = products.map((prod) => {
-    const orderItem = orderData.items.find((item) => item.productId === prod.id);
+    const orderItem = safeOrderItems.find((item) => item.productId === prod.id);
     if (orderItem) {
       const newStock = Math.max(0, prod.stock - orderItem.quantity);
       return { ...prod, stock: newStock };
@@ -1229,7 +1232,8 @@ export const saveOrder = (
   let updatedProducts = [...products];
 
   // 1. Restore stock for items in the old order
-  oldOrder.items.forEach((oldItem) => {
+  const oldItems = Array.isArray(oldOrder.items) ? oldOrder.items : [];
+  oldItems.forEach((oldItem) => {
     const pIdx = updatedProducts.findIndex((p) => p.id === oldItem.productId);
     if (pIdx !== -1) {
       updatedProducts[pIdx] = {
@@ -1240,7 +1244,8 @@ export const saveOrder = (
   });
 
   // 2. Deduct stock for items in the new order
-  orderData.items.forEach((newItem) => {
+  const newItems = Array.isArray(orderData.items) ? orderData.items : oldItems;
+  newItems.forEach((newItem) => {
     const pIdx = updatedProducts.findIndex((p) => p.id === newItem.productId);
     if (pIdx !== -1) {
       updatedProducts[pIdx] = {
@@ -1251,16 +1256,16 @@ export const saveOrder = (
   });
 
   // 3. Recalculate totals and bonus
-  const itemsSubtotal = orderData.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const itemsSubtotal = newItems.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0);
   const shippingFee = orderData.shippingFee || 0;
   const prepaidAmount = orderData.prepaidAmount || 0;
   const totalAmount = itemsSubtotal + shippingFee;
   const remainingAmount = Math.max(0, totalAmount - prepaidAmount);
 
   let totalBonusEarned = 0;
-  orderData.items.forEach((item) => {
-    if (item.isWarrantyActivated) {
-      totalBonusEarned += (item.activationBonusAmount || 0) * item.quantity;
+  newItems.forEach((item) => {
+    if (item && item.isWarrantyActivated) {
+      totalBonusEarned += (item.activationBonusAmount || 0) * (item.quantity || 1);
     }
   });
 
@@ -1286,6 +1291,7 @@ export const saveOrder = (
   const updatedOrder: Order = {
     ...oldOrder,
     ...orderData,
+    items: newItems,
     subtotal: itemsSubtotal,
     shippingFee,
     prepaidAmount,
@@ -1747,10 +1753,11 @@ export const getEmployeeBonusSummaries = (): EmployeeBonusSummary[] => {
     }
 
     // Count warranty activated items and calculate bonus
-    order.items.forEach((item) => {
-      if (item.isWarrantyActivated) {
-        summary.totalWarrantyItemsActivated += item.quantity;
-        summary.totalBonusEarned += (item.activationBonusAmount || 0) * item.quantity;
+    const orderItems = Array.isArray(order.items) ? order.items : [];
+    orderItems.forEach((item) => {
+      if (item && item.isWarrantyActivated) {
+        summary.totalWarrantyItemsActivated += (item.quantity || 1);
+        summary.totalBonusEarned += (item.activationBonusAmount || 0) * (item.quantity || 1);
       }
     });
   });
@@ -2509,7 +2516,7 @@ export const exportOrdersAsCsv = () => {
   ];
 
   const rows = orders.map((o) => {
-    const itemsSummary = o.items.map((i) => `${i.productName} (x${i.quantity})`).join('; ');
+    const itemsSummary = (o.items || []).map((i) => `${i.productName} (x${i.quantity})`).join('; ');
     return [
       `"${o.orderCode}"`,
       `"${o.createdAt.slice(0, 10)}"`,
