@@ -12,6 +12,7 @@ import {
   PaymentLog,
   PriceChangeRecord,
   StockChangeRecord,
+  DistributorQuote,
   DepartureLocation,
   DeliveryTrip,
 } from '../types';
@@ -721,6 +722,152 @@ export const deleteProduct = (id: string): boolean => {
   return true;
 };
 
+/**
+ * Danh sách Nhà phân phối phổ biến (Distributor Presets)
+ */
+export const DISTRIBUTOR_PRESETS = [
+  'NPP Daikin Miền Nam',
+  'NPP Chợ Lớn',
+  'NPP Tân Viễn Đông',
+  'NPP Casper Miền Nam',
+  'NPP Tân Á Đại Thành',
+  'NPP Synnex FPT',
+  'NPP Phúc Giang',
+  'NPP Panasonic',
+  'Điện Máy Xanh Đại Lý',
+  'NPP Sanaky Miền Nam',
+  'NPP Sunhouse',
+  'NPP Aqua / Sanyo',
+  'Khác (NPP tự do)',
+];
+
+/**
+ * Lấy toàn bộ danh sách tên NPP có trong hệ thống
+ */
+export const getAllDistributorNames = (): string[] => {
+  const products = getProducts();
+  const set = new Set<string>(DISTRIBUTOR_PRESETS);
+  products.forEach((p) => {
+    if (p.distributorName && p.distributorName.trim()) {
+      set.add(p.distributorName.trim());
+    }
+    if (Array.isArray(p.distributorQuotes)) {
+      p.distributorQuotes.forEach((q) => {
+        if (q.distributorName && q.distributorName.trim()) {
+          set.add(q.distributorName.trim());
+        }
+      });
+    }
+  });
+  return Array.from(set);
+};
+
+/**
+ * Thêm hoặc Cập nhật Báo giá Nhà phân phối & Tính Giá Net sau khi trừ quà / chiết khấu
+ */
+export const addDistributorQuoteToProduct = (
+  productId: string,
+  quoteData: {
+    distributorName: string;
+    quoteDate: string;
+    quotedPrice: number;
+    minQuantity: number;
+    giftDescription?: string;
+    giftValue?: number;
+    inStockAtDistributor?: boolean;
+    contactPerson?: string;
+    note?: string;
+    updatedBy?: string;
+    applyAsCostPrice?: boolean; // Tự động cập nhật làm giá vốn sản phẩm
+  }
+): Product | null => {
+  const products = getProducts();
+  const index = products.findIndex((p) => p.id === productId);
+  if (index === -1) return null;
+
+  const current = products[index];
+  const minQty = Math.max(1, quoteData.minQuantity || 1);
+  const giftVal = Math.max(0, quoteData.giftValue || 0);
+  const discountPerUnit = Math.round(giftVal / minQty);
+  const netCostPerUnit = Math.max(0, quoteData.quotedPrice - discountPerUnit);
+
+  const newQuote: DistributorQuote = {
+    id: `dq-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    distributorName: quoteData.distributorName.trim(),
+    quoteDate: quoteData.quoteDate || new Date().toISOString().slice(0, 10),
+    quotedPrice: quoteData.quotedPrice,
+    minQuantity: minQty,
+    giftDescription: quoteData.giftDescription?.trim() || undefined,
+    giftValue: giftVal,
+    netCostPerUnit,
+    inStockAtDistributor: quoteData.inStockAtDistributor !== undefined ? quoteData.inStockAtDistributor : true,
+    contactPerson: quoteData.contactPerson?.trim() || undefined,
+    note: quoteData.note?.trim() || undefined,
+    createdAt: new Date().toISOString(),
+    updatedBy: quoteData.updatedBy || 'Quản lý kho',
+  };
+
+  const existingQuotes = Array.isArray(current.distributorQuotes) ? [...current.distributorQuotes] : [];
+  existingQuotes.unshift(newQuote);
+
+  const updatedProduct: Product = {
+    ...current,
+    distributorName: newQuote.distributorName,
+    distributorQuoteDate: newQuote.quoteDate,
+    distributorBasePrice: newQuote.quotedPrice,
+    distributorMinQuantity: newQuote.minQuantity,
+    distributorGiftDesc: newQuote.giftDescription,
+    distributorGiftValue: newQuote.giftValue,
+    distributorNetCost: newQuote.netCostPerUnit,
+    distributorQuotes: existingQuotes,
+    costPrice: quoteData.applyAsCostPrice ? netCostPerUnit : (current.costPrice || netCostPerUnit),
+    priceUpdatedAt: quoteData.quoteDate || current.priceUpdatedAt,
+    priceNote: `Báo giá NPP ${newQuote.distributorName}: ${newQuote.quotedPrice.toLocaleString('vi-VN')}đ (SL: ${newQuote.minQuantity})${newQuote.giftDescription ? ` - Quà: ${newQuote.giftDescription}` : ''} => Net: ${newQuote.netCostPerUnit.toLocaleString('vi-VN')}đ`,
+  };
+
+  products[index] = updatedProduct;
+  localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+  notifyListeners();
+  dispatchEntityChange('product', 'save', updatedProduct);
+  return updatedProduct;
+};
+
+/**
+ * Xóa một bản ghi báo giá NPP
+ */
+export const deleteDistributorQuoteFromProduct = (
+  productId: string,
+  quoteId: string
+): Product | null => {
+  const products = getProducts();
+  const index = products.findIndex((p) => p.id === productId);
+  if (index === -1) return null;
+
+  const current = products[index];
+  const existingQuotes = Array.isArray(current.distributorQuotes) ? [...current.distributorQuotes] : [];
+  const updatedQuotes = existingQuotes.filter((q) => q.id !== quoteId);
+
+  const latestQuote = updatedQuotes[0];
+
+  const updatedProduct: Product = {
+    ...current,
+    distributorQuotes: updatedQuotes,
+    distributorName: latestQuote ? latestQuote.distributorName : undefined,
+    distributorQuoteDate: latestQuote ? latestQuote.quoteDate : undefined,
+    distributorBasePrice: latestQuote ? latestQuote.quotedPrice : undefined,
+    distributorMinQuantity: latestQuote ? latestQuote.minQuantity : undefined,
+    distributorGiftDesc: latestQuote ? latestQuote.giftDescription : undefined,
+    distributorGiftValue: latestQuote ? latestQuote.giftValue : undefined,
+    distributorNetCost: latestQuote ? latestQuote.netCostPerUnit : undefined,
+  };
+
+  products[index] = updatedProduct;
+  localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+  notifyListeners();
+  dispatchEntityChange('product', 'save', updatedProduct);
+  return updatedProduct;
+};
+
 
 /**
  * Export product list and price audit history to CSV
@@ -736,7 +883,13 @@ export const exportProductPriceAuditAsCsv = (productsToExport?: Product[]) => {
     'Giá bán hiện tại (VNĐ)',
     'Giá vốn / nhập (VNĐ)',
     'Biên lợi nhuận (%)',
-    'Ngày cập nhật giá',
+    'Nhà phân phối (NPP)',
+    'Ngày báo giá NPP',
+    'Giá gốc NPP (VNĐ)',
+    'Bậc SL áp dụng',
+    'Quà tặng / Chiết khấu',
+    'Giá Net sau trừ quà (VNĐ)',
+    'Ngày cập nhật giá bán',
     'Người cập nhật giá',
     'Ghi chú cập nhật giá',
     'Số lần thay đổi giá',
@@ -749,6 +902,12 @@ export const exportProductPriceAuditAsCsv = (productsToExport?: Product[]) => {
     const margin = p.price > 0 && cost > 0 ? (((p.price - cost) / p.price) * 100).toFixed(1) + '%' : 'N/A';
     const priceDate = p.priceUpdatedAt ? p.priceUpdatedAt.slice(0, 10) : '';
     const historyCount = (p.priceHistory || []).length;
+    const distName = p.distributorName || '';
+    const distDate = p.distributorQuoteDate || '';
+    const distBasePrice = p.distributorBasePrice || '';
+    const distMinQty = p.distributorMinQuantity || '';
+    const distGift = p.distributorGiftDesc ? `${p.distributorGiftDesc} (-${(p.distributorGiftValue || 0).toLocaleString('vi-VN')}đ)` : '';
+    const distNetCost = p.distributorNetCost || p.costPrice || '';
 
     return [
       `"${p.sku}"`,
@@ -759,6 +918,12 @@ export const exportProductPriceAuditAsCsv = (productsToExport?: Product[]) => {
       p.price,
       cost,
       `"${margin}"`,
+      `"${distName.replace(/"/g, '""')}"`,
+      `"${distDate}"`,
+      distBasePrice,
+      distMinQty,
+      `"${distGift.replace(/"/g, '""')}"`,
+      distNetCost,
       `"${priceDate}"`,
       `"${(p.priceUpdatedBy || '').replace(/"/g, '""')}"`,
       `"${(p.priceNote || '').replace(/"/g, '""')}"`,

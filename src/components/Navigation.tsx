@@ -11,6 +11,8 @@ import {
   Truck,
   ChevronLeft,
   ChevronRight,
+  Calculator,
+  Coins,
 } from 'lucide-react';
 
 interface NavigationProps {
@@ -61,6 +63,22 @@ export const Navigation: React.FC<NavigationProps> = ({
       badge: lowStockCount > 0 ? `${lowStockCount} sắp hết` : null,
       badgeBg: 'bg-rose-100 text-rose-800 border-rose-300',
       badgeTitle: 'Sản phẩm sắp hết hàng',
+    },
+    {
+      id: 'kdt-price-hub',
+      label: 'Trung tâm Báo giá',
+      icon: Coins,
+      badge: 'PRICE HUB',
+      badgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      badgeTitle: 'KDT Price Hub - Trung tâm quản lý báo giá và nhà cung cấp',
+    },
+    {
+      id: 'price-lookup',
+      label: 'Tra cứu giá',
+      icon: Calculator,
+      badge: 'NPP & Net',
+      badgeBg: 'bg-purple-100 text-purple-800 border-purple-300',
+      badgeTitle: 'Tra cứu giá, bảng giá NPP & tính giá Net',
     },
     {
       id: 'delivery-schedule',

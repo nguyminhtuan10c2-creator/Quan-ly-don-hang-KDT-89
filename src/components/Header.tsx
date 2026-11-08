@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PackageCheck, User, RefreshCw, Store, ShieldCheck, UserCheck, Database, HardDrive, Cloud, CheckCircle, Loader2 } from 'lucide-react';
+import { PackageCheck, User, RefreshCw, Store, ShieldCheck, UserCheck, Database, HardDrive, Cloud, CheckCircle, Loader2, Calculator } from 'lucide-react';
 import { getActiveStaff, getStoreInfo, resetToDemoData } from '../services/storageService';
 import { StaffModal } from './StaffModal';
 import { syncAllToFirebase, subscribeToSyncStatus, FirebaseSyncStatus } from '../services/firebaseService';
@@ -81,6 +81,17 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenDataManagement
 
             {/* Quick Actions & Staff Profile */}
             <div className="flex items-center space-x-1.5 sm:space-x-2.5 shrink-0">
+              {/* Prominent Quick Price Hub Button */}
+              <button
+                type="button"
+                onClick={() => onNavigate('kdt-price-hub')}
+                className="flex items-center space-x-1 sm:space-x-1.5 text-xs font-black text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-indigo-500 px-2.5 sm:px-3 py-1.5 rounded-xl shadow-md shadow-indigo-900/40 border border-indigo-400/30 transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0"
+                title="KDT Price Hub - Trung tâm dữ liệu báo giá & tra cứu giá nhà phân phối"
+              >
+                <Calculator className="w-3.5 h-3.5 text-amber-300" />
+                <span className="font-black">Báo giá NPP</span>
+              </button>
+
               {/* Firebase Cloud Sync Button */}
               <button
                 type="button"
@@ -102,6 +113,7 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenDataManagement
                 </span>
                 <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-slate-900 shrink-0 animate-pulse" title="Đã kết nối Firebase" />
               </button>
+
 
               {/* Data & Storage Management Button */}
               {onOpenDataManagement && (

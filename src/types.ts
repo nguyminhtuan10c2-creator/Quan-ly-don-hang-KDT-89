@@ -39,6 +39,22 @@ export interface StockChangeRecord {
   note?: string;
 }
 
+export interface DistributorQuote {
+  id: string;
+  distributorName: string; // Tên Nhà phân phối / Đại lý báo giá (VD: NPP Daikin, Chợ Lớn, Tân Viễn Đông...)
+  quoteDate: string; // Ngày cập nhật / hỏi giá (YYYY-MM-DD hoặc ISO)
+  quotedPrice: number; // Giá báo niêm yết từ NPP cho 1 con (VNĐ)
+  minQuantity: number; // Số lượng tối thiểu để được giá này (VD: 1 con, 3 con, 5 con...)
+  giftDescription?: string; // Tên quà tặng kèm (VD: Tặng lò vi sóng, tặng quạt đứng...)
+  giftValue?: number; // Tổng giá trị quà quy đổi thành tiền mặt (VNĐ)
+  netCostPerUnit: number; // Giá nhập thực tế trên 1 sản phẩm sau khi trừ quà = quotedPrice - (giftValue / minQuantity)
+  inStockAtDistributor?: boolean; // Tình trạng hàng bên NPP: Còn hàng / Hết hàng / Chờ đặt 1-2 ngày
+  contactPerson?: string; // Tên / SĐT nhân viên NPP báo giá (VD: Anh Hải Daikin - 0909...)
+  note?: string; // Ghi chú (VD: Lấy 5 con chiết khấu trừ quà, bao ship kho...)
+  createdAt: string;
+  updatedBy?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -64,6 +80,17 @@ export interface Product {
   // Thuộc tính kiểm soát kho
   stockUpdatedAt?: string; // Ngày giờ cập nhật số lượng kho gần nhất
   stockHistory?: StockChangeRecord[]; // Lịch sử biến động tồn kho
+
+  // Thuộc tính theo dõi Báo giá Nhà phân phối & Giá đi hỏi (Distributor Quotes & Inquiry)
+  distributorName?: string; // Tên nhà phân phối chính / gần nhất báo giá (VD: NPP Daikin, Chợ Lớn...)
+  distributorQuoteDate?: string; // Ngày báo giá gần nhất của NPP (YYYY-MM-DD)
+  distributorBasePrice?: number; // Giá báo gốc từ NPP (VNĐ)
+  distributorMinQuantity?: number; // Bậc số lượng áp dụng (VD: 5 con)
+  distributorGiftDesc?: string; // Tên quà tặng kèm nếu có (VD: Tặng lò vi sóng 1tr5)
+  distributorGiftValue?: number; // Giá trị quà quy đổi (VNĐ)
+  distributorNetCost?: number; // Giá nhập thực tế sau khi trừ quà chiết khấu = Giá gốc - (Quà / SL)
+  distributorQuotes?: DistributorQuote[]; // Lịch sử / Danh sách các báo giá từ nhiều NPP để so sánh
+  isOrderOnDemand?: boolean; // Đánh dấu: Hàng đi hỏi giá / Hàng đặt theo yêu cầu (không nhất thiết có sẵn trong kho)
 }
 
 export interface CategoryItem {
@@ -208,6 +235,187 @@ export interface DeliveryTrip {
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
+}
+
+// ========================================================
+// KDT PRICE HUB – TRUNG TÂM DỮ LIỆU BÁO GIÁ NHÀ CUNG CẤP
+// ========================================================
+
+export interface PriceProduct {
+  id: string; // Unique ID (e.g. pr-1731...)
+  internalCode: string; // Mã sản phẩm nội bộ (tự sinh, VD: KDT-PR-001)
+  code?: string; // Alias for internalCode
+  name: string; // Tên sản phẩm
+  model: string; // Mã hàng / Model / Part Number
+  brand: string; // Thương hiệu (Daikin, Casper, Samsung, Bosch...)
+  origin?: string; // Xuất xứ (Nhật Bản, Thái Lan, Việt Nam, Trung Quốc...)
+  specifications?: string; // Thông số kỹ thuật (Công suất, kích thước, điện áp...)
+  specification?: string; // Alias for specifications
+  packingSpec?: string; // Quy cách (Bộ, Thùng, Cái...)
+  unit: string; // Đơn vị tính (Bộ, Cái, Chiếc, Mét, Cuộn...)
+  category: string; // Nhóm sản phẩm (Điện lạnh, Điện máy, Gia dụng, Thiết bị điện...)
+  image?: string; // Hình ảnh sản phẩm (base64 hoặc URL)
+  imageUrl?: string; // Alias for image
+  attachmentUrl?: string; // File tài liệu kỹ thuật đính kèm
+  technicalDocUrl?: string; // Alias for attachmentUrl
+  attachmentName?: string;
+  notes?: string; // Ghi chú sản phẩm
+  createdBy: string; // Người tạo (Tên Sale)
+  createdAt: string; // ISO String
+  updatedAt: string; // ISO String
+
+  // Optional link to warehouse inventory
+  linkedInventoryProductId?: string; // ID sản phẩm trong kho KDT (nếu người dùng chủ động liên kết)
+  linkedInventoryProductName?: string;
+  linkedInventoryProductSku?: string;
+}
+
+export interface Supplier {
+  id: string; // Unique ID (e.g. sup-1731...)
+  code: string; // Mã nhà cung cấp (VD: NCC-DAIKIN-01)
+  name: string; // Tên nhà cung cấp / Nhà phân phối
+  contactPerson?: string; // Người liên hệ / Sale phụ trách
+  phone?: string; // Số điện thoại
+  email?: string; // Email
+  address?: string; // Địa chỉ kho / văn phòng
+  website?: string; // Website
+  productGroups?: string[]; // Nhóm hàng cung cấp
+  categories?: string[]; // Alias for productGroups
+  paymentTerms?: string; // Điều kiện thanh toán (Công nợ 30 ngày, Thanh toán 100% trước khi giao...)
+  notes?: string; // Ghi chú hợp tác, chính sách chiết khấu
+  isActive: boolean; // Trạng thái hoạt động (true: Đang giao dịch, false: Tạm ngừng)
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuotationItem {
+  id: string;
+  quotationId: string;
+  productId: string; // ID sản phẩm trong PriceProduct
+  productName: string;
+  productModel?: string;
+  unit: string;
+  quotedPrice: number; // Giá nhà cung cấp báo niêm yết (VNĐ hoặc nguyên tệ)
+  currency?: string;
+  discountPercent?: number; // Chiết khấu % (0 - 100)
+  discountAmount?: number; // Chiết khấu tiền mặt (VNĐ)
+  giftDescription?: string; // Tên quà tặng kèm (VD: Tặng lò vi sóng, tặng quạt...)
+  giftValue?: number; // Tổng giá trị quà quy đổi thành tiền mặt (VNĐ)
+  minQuantity: number; // Số lượng tối thiểu để được giá (MOQ, mặc định 1)
+  vatPercent?: number; // Thuế VAT % (0, 8, 10...)
+  vatAmount?: number; // Số tiền VAT
+  shippingFee?: number; // Phí vận chuyển
+  freightCost?: number; // Alias for shippingFee
+  otherFees?: number; // Phụ phí khác (bốc xếp, lắp đặt...)
+  otherCost?: number; // Alias for otherFees
+  netPricePerUnit: number; // Giá sau chiết khấu thực tế trên 1 sản phẩm
+  netPrice?: number; // Alias for netPricePerUnit
+  totalEstimatedCost: number; // Tổng giá dự kiến gồm VAT + ship nếu có
+  estimatedTotalCost?: number; // Alias for totalEstimatedCost
+  deliveryDays?: number; // Thời gian giao hàng (ngày)
+  leadTimeDays?: number; // Alias for deliveryDays
+  stockStatus: 'in_stock' | 'order' | 'out_of_stock' | 'unconfirmed' | 'pre_order'; // Tình trạng hàng bên NCC
+  notes?: string;
+}
+
+export interface QuotationAttachment {
+  id: string;
+  name?: string;
+  fileName?: string;
+  url?: string;
+  fileUrl?: string;
+  size?: number;
+  fileSize?: number;
+  type?: string;
+  fileType?: string;
+  uploadedAt: string;
+  uploadedBy?: string;
+}
+
+export interface SupplierQuotation {
+  id: string; // Unique ID (e.g. quote-1731...)
+  quotationCode: string; // Mã báo giá (VD: BG-2026-001)
+  supplierId: string; // Liên kết nhà cung cấp
+  supplierName: string;
+  supplierCode?: string;
+  supplierContact?: string;
+  supplierPhone?: string;
+  quoteDate: string; // Ngày hỏi giá (YYYY-MM-DD)
+  expiryDate?: string; // Hạn hiệu lực báo giá (YYYY-MM-DD)
+  validUntil?: string; // Alias for expiryDate
+  currency: string; // Đơn vị tiền tệ (mặc định 'VNĐ')
+  exchangeRate?: number; // Tỷ giá nếu ngoại tệ
+  paymentTerms?: string; // Điều kiện thanh toán
+  deliveryDays?: number; // Thời gian giao hàng dự kiến
+  deliveryMethod?: string; // Giao tại kho KDT / Lấy tại kho NCC
+  deliveryTerms?: string; // Alias for deliveryMethod
+  status: 'valid' | 'expired' | 'negotiating'; // Hiệu lực báo giá
+  notes?: string;
+  createdBy: string; // Nhân viên hỏi giá (Sale)
+  attachments?: QuotationAttachment[]; // File báo giá gốc đính kèm
+  items: QuotationItem[]; // Danh sách các sản phẩm báo giá
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuotationAuditLog {
+  id: string;
+  quotationId?: string;
+  productId?: string;
+  supplierId?: string;
+  action: 'create' | 'update' | 'delete' | 'merge_product' | 'import_file' | 'link_inventory';
+  description: string;
+  changedBy: string;
+  changedAt: string;
+  oldValues?: Record<string, any>;
+  newValues?: Record<string, any>;
+  fieldChanged?: string;
+  oldValue?: any;
+  newValue?: any;
+  reason?: string;
+}
+
+export interface QuotationImportPreviewRow {
+  rowIndex: number;
+  productName: string;
+  rawProductName?: string;
+  productModel?: string;
+  rawModel?: string;
+  brand?: string;
+  category?: string;
+  unit: string;
+  quotedPrice: number;
+  discountPercent?: number;
+  discountAmount?: number;
+  netPrice?: number;
+  minQuantity: number;
+  stockStatus?: 'in_stock' | 'order' | 'out_of_stock' | 'unconfirmed' | 'pre_order';
+  notes?: string;
+  matchedProductId?: string; // ID sản phẩm gợi ý nếu đã có
+  matchedProductName?: string;
+  matchScore?: number; // Độ khớp tên/model
+  isNewProduct: boolean; // Người dùng chọn tạo sản phẩm mới hay ghép
+  isValid: boolean;
+  hasError?: boolean;
+  isMatched?: boolean;
+  createNewIfMissing?: boolean;
+  validationError?: string;
+  errorMessage?: string;
+}
+
+export interface QuotationImportJob {
+  id: string;
+  fileName: string;
+  fileType: 'xlsx' | 'xls' | 'csv' | 'pdf';
+  fileData?: string; // Base64 backup nếu cần
+  supplierId?: string;
+  supplierName?: string;
+  importedAt: string;
+  importedBy: string;
+  totalRows: number;
+  successCount: number;
+  errorCount: number;
+  status: 'preview' | 'completed' | 'cancelled';
 }
 
 

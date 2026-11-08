@@ -15,6 +15,8 @@ import {
   Cloud,
   ChevronRight,
   ShieldCheck,
+  Calculator,
+  Coins,
 } from 'lucide-react';
 
 interface MobileBottomNavProps {
@@ -42,6 +44,22 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   };
 
   const moreMenuItems = [
+    {
+      id: 'kdt-price-hub',
+      label: 'KDT Price Hub - Báo giá NPP',
+      desc: 'Tra cứu giá siêu tốc, so sánh NPP, Net price, chiết khấu quà & import file',
+      icon: Coins,
+      badge: 'PRICE HUB',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+    },
+    {
+      id: 'price-lookup',
+      label: 'Tra cứu giá & Báo giá NPP',
+      desc: 'Tra cứu giá, bảng giá NPP, trừ quà chiết khấu & tính giá Net',
+      icon: Calculator,
+      badge: 'NPP & Net',
+      badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+    },
     {
       id: 'inventory',
       label: 'Kho hàng & Tồn kho',

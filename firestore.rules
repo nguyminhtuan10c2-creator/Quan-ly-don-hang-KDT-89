@@ -82,44 +82,81 @@ service cloud.firestore {
     // ----------------------------------------------------
 
     match /orders/{orderId} {
-      allow read: if isValidId(orderId);
+      allow get: if isValidId(orderId);
+      allow list: if true;
       allow create: if isValidId(orderId) && isValidOrder(incoming());
       allow update: if isValidId(orderId) && isValidOrder(incoming()) && incoming().id == existing().id;
       allow delete: if isValidId(orderId);
     }
 
     match /products/{productId} {
-      allow read: if isValidId(productId);
+      allow get: if isValidId(productId);
+      allow list: if true;
       allow create: if isValidId(productId) && isValidProduct(incoming());
       allow update: if isValidId(productId) && isValidProduct(incoming()) && incoming().id == existing().id;
       allow delete: if isValidId(productId);
     }
 
     match /staff/{staffId} {
-      allow read: if isValidId(staffId);
+      allow get: if isValidId(staffId);
+      allow list: if true;
       allow create: if isValidId(staffId) && isValidStaff(incoming());
       allow update: if isValidId(staffId) && isValidStaff(incoming()) && incoming().id == existing().id;
       allow delete: if isValidId(staffId);
     }
 
     match /storeSettings/{docId} {
-      allow read: if isValidId(docId);
+      allow get: if isValidId(docId);
+      allow list: if true;
       allow create, update: if isValidId(docId) && isValidStoreInfo(incoming());
       allow delete: if false;
     }
 
     match /departureLocations/{departureId} {
-      allow read: if isValidId(departureId);
+      allow get: if isValidId(departureId);
+      allow list: if true;
       allow create: if isValidId(departureId) && isValidDepartureLocation(incoming());
       allow update: if isValidId(departureId) && isValidDepartureLocation(incoming()) && incoming().id == existing().id;
       allow delete: if isValidId(departureId);
     }
 
     match /deliveryTrips/{tripId} {
-      allow read: if isValidId(tripId);
+      allow get: if isValidId(tripId);
+      allow list: if true;
       allow create: if isValidId(tripId) && isValidDeliveryTrip(incoming());
       allow update: if isValidId(tripId) && isValidDeliveryTrip(incoming()) && incoming().id == existing().id;
       allow delete: if isValidId(tripId);
+    }
+
+    // ----------------------------------------------------
+    // KDT Price Hub Collections (Trung tâm dữ liệu báo giá)
+    // ----------------------------------------------------
+    match /priceProducts/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if true;
+      allow create, update: if isValidId(docId);
+      allow delete: if isValidId(docId);
+    }
+
+    match /suppliers/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if true;
+      allow create, update: if isValidId(docId);
+      allow delete: if isValidId(docId);
+    }
+
+    match /supplierQuotations/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if true;
+      allow create, update: if isValidId(docId);
+      allow delete: if isValidId(docId);
+    }
+
+    match /quotationAuditLogs/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if true;
+      allow create: if isValidId(docId);
+      allow update, delete: if false; // Audit logs are immutable
     }
 
     // Connection testing endpoint

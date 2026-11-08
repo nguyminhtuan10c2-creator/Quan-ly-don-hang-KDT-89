@@ -28,6 +28,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
+  Building2,
+  Gift,
+  Calculator,
 } from 'lucide-react';
 import { Product, CategoryItem, BrandItem, PriceChangeRecord } from '../types';
 import {
@@ -44,8 +47,11 @@ import {
   saveBrand,
   quickUpdateProductStockAndPrice,
   exportProductPriceAuditAsCsv,
+  DISTRIBUTOR_PRESETS,
+  getAllDistributorNames,
 } from '../services/storageService';
 import { DistributorReceiptScannerModal } from './DistributorReceiptScannerModal';
+import { DistributorQuoteModal } from './DistributorQuoteModal';
 
 
 interface InventoryProps {
@@ -68,13 +74,15 @@ export const Inventory: React.FC<InventoryProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
-  const [stockStatusFilter, setStockStatusFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all');
+  const [selectedDistributor, setSelectedDistributor] = useState<string>('all');
+  const [stockStatusFilter, setStockStatusFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | 'order_on_demand'>('all');
   const [priceRecencyFilter, setPriceRecencyFilter] = useState<'all' | 'recent_7d' | 'recent_30d' | 'older_90d'>('all');
-  const [sortBy, setSortBy] = useState<'price_updated_desc' | 'stock_asc' | 'stock_desc' | 'price_desc' | 'price_asc' | 'name_asc'>('price_updated_desc');
+  const [sortBy, setSortBy] = useState<'price_updated_desc' | 'quote_date_desc' | 'net_cost_asc' | 'stock_asc' | 'stock_desc' | 'price_desc' | 'price_asc' | 'name_asc'>('price_updated_desc');
 
-  // Fallback category and brand lists
+  // Fallback category, brand, and distributor lists
   const managedCategories = categoriesProp || getCategories();
   const managedBrands = brandsProp || getBrands();
+  const allDistributors = getAllDistributorNames();
 
   // Quick Price & Stock Modal State
   const [quickModalOpen, setQuickModalOpen] = useState(false);
@@ -85,6 +93,9 @@ export const Inventory: React.FC<InventoryProps> = ({
   const [quickPriceDate, setQuickPriceDate] = useState<string>('');
   const [quickPriceNote, setQuickPriceNote] = useState<string>('');
   const [quickUpdatedBy, setQuickUpdatedBy] = useState<string>('');
+
+  // Distributor Quote & Net Cost Calculator Modal State
+  const [quoteModalProduct, setQuoteModalProduct] = useState<Product | null>(null);
 
   // Price History Timeline Modal State
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
@@ -123,6 +134,15 @@ export const Inventory: React.FC<InventoryProps> = ({
   const [activationBonusAmount, setActivationBonusAmount] = useState<number>(50000);
   const [description, setDescription] = useState('');
 
+  // Distributor & On-Demand Inquiry Form Fields
+  const [isOrderOnDemand, setIsOrderOnDemand] = useState<boolean>(false);
+  const [formDistributorName, setFormDistributorName] = useState<string>(DISTRIBUTOR_PRESETS[0]);
+  const [formDistributorDate, setFormDistributorDate] = useState<string>('');
+  const [formDistributorBasePrice, setFormDistributorBasePrice] = useState<number | ''>('');
+  const [formDistributorMinQty, setFormDistributorMinQty] = useState<number | ''>(5);
+  const [formDistributorGiftDesc, setFormDistributorGiftDesc] = useState<string>('');
+  const [formDistributorGiftValue, setFormDistributorGiftValue] = useState<number | ''>('');
+
   // Helper extractor for product brand if undefined
   const getProductBrand = (product: Product): string => {
     if (product.brand) return product.brand.trim();
@@ -156,21 +176,26 @@ export const Inventory: React.FC<InventoryProps> = ({
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (p.brand || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (p.category || '').toLowerCase().includes(searchQuery.toLowerCase());
+        (p.category || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.distributorName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.distributorGiftDesc || '').toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
       const pBrand = getProductBrand(p);
       const matchesBrand = selectedBrand === 'all' || pBrand === selectedBrand;
+      const matchesDistributor = selectedDistributor === 'all' || p.distributorName === selectedDistributor;
 
-      // Stock status filter
+      // Stock & On-Demand status filter
       let matchesStock = true;
       const minAlert = p.minStockAlert || 5;
-      if (stockStatusFilter === 'out_of_stock') {
-        matchesStock = p.stock === 0;
+      if (stockStatusFilter === 'order_on_demand') {
+        matchesStock = Boolean(p.isOrderOnDemand) || Boolean(p.distributorName) || Boolean(p.distributorQuotes && p.distributorQuotes.length > 0) || p.stock === 0;
+      } else if (stockStatusFilter === 'out_of_stock') {
+        matchesStock = p.stock === 0 && !p.isOrderOnDemand;
       } else if (stockStatusFilter === 'low_stock') {
-        matchesStock = p.stock > 0 && p.stock <= minAlert;
+        matchesStock = p.stock > 0 && p.stock <= minAlert && !p.isOrderOnDemand;
       } else if (stockStatusFilter === 'in_stock') {
-        matchesStock = p.stock > minAlert;
+        matchesStock = p.stock > minAlert && !p.isOrderOnDemand;
       }
 
       // Price update recency filter
@@ -184,13 +209,23 @@ export const Inventory: React.FC<InventoryProps> = ({
         matchesPriceRecency = days > 90;
       }
 
-      return matchesSearch && matchesCategory && matchesBrand && matchesStock && matchesPriceRecency;
+      return matchesSearch && matchesCategory && matchesBrand && matchesDistributor && matchesStock && matchesPriceRecency;
     })
     .sort((a, b) => {
       if (sortBy === 'price_updated_desc') {
         const dateA = new Date(a.priceUpdatedAt || a.createdAt || 0).getTime();
         const dateB = new Date(b.priceUpdatedAt || b.createdAt || 0).getTime();
         return dateB - dateA;
+      }
+      if (sortBy === 'quote_date_desc') {
+        const dateA = new Date(a.distributorQuoteDate || a.priceUpdatedAt || 0).getTime();
+        const dateB = new Date(b.distributorQuoteDate || b.priceUpdatedAt || 0).getTime();
+        return dateB - dateA;
+      }
+      if (sortBy === 'net_cost_asc') {
+        const netA = a.distributorNetCost || a.costPrice || a.price;
+        const netB = b.distributorNetCost || b.costPrice || b.price;
+        return netA - netB;
       }
       if (sortBy === 'stock_asc') return a.stock - b.stock;
       if (sortBy === 'stock_desc') return b.stock - a.stock;
@@ -205,8 +240,9 @@ export const Inventory: React.FC<InventoryProps> = ({
   const totalStockUnits = products.reduce((sum, p) => sum + (p.stock || 0), 0);
   const totalInventoryRetailValue = products.reduce((sum, p) => sum + (p.price || 0) * (p.stock || 0), 0);
   const totalInventoryCostValue = products.reduce((sum, p) => sum + (p.costPrice || p.price * 0.78) * (p.stock || 0), 0);
-  const lowStockCount = products.filter((p) => p.stock > 0 && p.stock <= (p.minStockAlert || 5)).length;
-  const outOfStockCount = products.filter((p) => p.stock === 0).length;
+  const lowStockCount = products.filter((p) => p.stock > 0 && p.stock <= (p.minStockAlert || 5) && !p.isOrderOnDemand).length;
+  const outOfStockCount = products.filter((p) => p.stock === 0 && !p.isOrderOnDemand).length;
+  const onDemandCount = products.filter((p) => p.isOrderOnDemand || p.distributorName || (p.distributorQuotes && p.distributorQuotes.length > 0)).length;
   const priceUpdatedLast30DaysCount = products.filter((p) => getDaysAgo(p.priceUpdatedAt || p.createdAt) <= 30).length;
 
   // Handler: Open Quick Price/Stock Update Modal
@@ -284,6 +320,16 @@ export const Inventory: React.FC<InventoryProps> = ({
     setWarrantyMonths(12);
     setActivationBonusAmount(50000);
     setDescription('');
+
+    // Reset distributor & on-demand fields
+    setIsOrderOnDemand(false);
+    setFormDistributorName(DISTRIBUTOR_PRESETS[0]);
+    setFormDistributorDate(new Date().toISOString().slice(0, 10));
+    setFormDistributorBasePrice('');
+    setFormDistributorMinQty(5);
+    setFormDistributorGiftDesc('');
+    setFormDistributorGiftValue('');
+
     setIsModalOpen(true);
   };
 
@@ -309,6 +355,16 @@ export const Inventory: React.FC<InventoryProps> = ({
     setWarrantyMonths(product.warrantyMonths || 12);
     setActivationBonusAmount(product.activationBonusAmount || 0);
     setDescription(product.description || '');
+
+    // Populate distributor & on-demand fields
+    setIsOrderOnDemand(Boolean(product.isOrderOnDemand));
+    setFormDistributorName(product.distributorName || DISTRIBUTOR_PRESETS[0]);
+    setFormDistributorDate(product.distributorQuoteDate || new Date().toISOString().slice(0, 10));
+    setFormDistributorBasePrice(product.distributorBasePrice !== undefined ? product.distributorBasePrice : '');
+    setFormDistributorMinQty(product.distributorMinQuantity || 5);
+    setFormDistributorGiftDesc(product.distributorGiftDesc || '');
+    setFormDistributorGiftValue(product.distributorGiftValue !== undefined ? product.distributorGiftValue : '');
+
     setIsModalOpen(true);
   };
 
@@ -334,6 +390,14 @@ export const Inventory: React.FC<InventoryProps> = ({
       }
     }
 
+    // Calculate distributor net cost if quoted
+    const parsedBasePrice = formDistributorBasePrice !== '' ? Number(formDistributorBasePrice) : undefined;
+    const parsedMinQty = formDistributorMinQty !== '' ? Math.max(1, Number(formDistributorMinQty)) : 1;
+    const parsedGiftVal = formDistributorGiftValue !== '' ? Math.max(0, Number(formDistributorGiftValue)) : 0;
+    const calculatedNetCost = parsedBasePrice !== undefined
+      ? Math.max(0, parsedBasePrice - Math.round(parsedGiftVal / parsedMinQty))
+      : undefined;
+
     saveProduct({
       id: editingProduct ? editingProduct.id : undefined,
       name: name.trim(),
@@ -342,7 +406,7 @@ export const Inventory: React.FC<InventoryProps> = ({
       brand,
       stock: Number(stock) || 0,
       price: Number(price) || 0,
-      costPrice: Number(costPrice) || Math.round((Number(price) || 0) * 0.78),
+      costPrice: calculatedNetCost !== undefined ? calculatedNetCost : (Number(costPrice) || Math.round((Number(price) || 0) * 0.78)),
       priceUpdatedAt: isoPriceDate,
       priceUpdatedBy: priceUpdatedBy.trim() || activeStaff?.employeeName || 'Quản lý kho',
       priceNote: priceNote.trim() || (editingProduct ? 'Cập nhật thông tin và giá sản phẩm' : 'Nhập kho sản phẩm mới'),
@@ -351,10 +415,21 @@ export const Inventory: React.FC<InventoryProps> = ({
       activationBonusAmount: isWarrantyEligible ? Number(activationBonusAmount) || 0 : 0,
       description: description.trim(),
       minStockAlert: 5,
+
+      // Distributor & On-Demand tracking
+      isOrderOnDemand,
+      distributorName: formDistributorName.trim() || undefined,
+      distributorQuoteDate: formDistributorDate || undefined,
+      distributorBasePrice: parsedBasePrice,
+      distributorMinQuantity: parsedMinQty,
+      distributorGiftDesc: formDistributorGiftDesc.trim() || undefined,
+      distributorGiftValue: parsedGiftVal > 0 ? parsedGiftVal : undefined,
+      distributorNetCost: calculatedNetCost,
     });
 
     setIsModalOpen(false);
   };
+
 
   const handleQuickSaveCategory = (e: React.FormEvent) => {
     e.preventDefault();
@@ -627,6 +702,24 @@ export const Inventory: React.FC<InventoryProps> = ({
               </select>
             </div>
 
+            {/* Distributor Dropdown Filter */}
+            <div className="flex items-center space-x-1 text-xs">
+              <Building2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+              <select
+                value={selectedDistributor}
+                onChange={(e) => setSelectedDistributor(e.target.value)}
+                className="bg-purple-50/70 border border-purple-200 text-purple-900 font-bold px-3 py-2 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+                title="Lọc theo Nhà phân phối báo giá"
+              >
+                <option value="all">Tất cả NPP báo giá ({allDistributors.length})</option>
+                {allDistributors.map((npp) => (
+                  <option key={npp} value={npp}>
+                    {npp}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Sort Dropdown */}
             <div className="flex items-center space-x-1 text-xs">
               <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
@@ -636,6 +729,8 @@ export const Inventory: React.FC<InventoryProps> = ({
                 className="bg-slate-50 border border-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="price_updated_desc">Ngày cập nhật giá mới nhất</option>
+                <option value="quote_date_desc">Ngày hỏi giá NPP mới nhất</option>
+                <option value="net_cost_asc">Giá Net NPP thấp nhất</option>
                 <option value="stock_asc">Tồn kho ít nhất trước</option>
                 <option value="stock_desc">Tồn kho nhiều nhất trước</option>
                 <option value="price_desc">Giá bán cao nhất</option>
@@ -688,7 +783,7 @@ export const Inventory: React.FC<InventoryProps> = ({
           })}
         </div>
 
-        {/* Stock Filter Pills */}
+        {/* Stock & On-Demand Filter Pills */}
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
           <span className="text-[11px] font-bold text-slate-500 mr-1">Trạng thái kho:</span>
           <button
@@ -732,13 +827,25 @@ export const Inventory: React.FC<InventoryProps> = ({
           >
             <span>Hết hàng (0): {outOfStockCount}</span>
           </button>
+          <button
+            onClick={() => setStockStatusFilter('order_on_demand')}
+            className={`px-3 py-1.5 rounded-lg font-bold text-[11px] transition-all flex items-center space-x-1 ${
+              stockStatusFilter === 'order_on_demand'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'bg-purple-50 text-purple-800 border border-purple-200 hover:bg-purple-100'
+            }`}
+          >
+            <Building2 className="w-3 h-3" />
+            <span>Hàng đi hỏi / Báo giá NPP ({onDemandCount})</span>
+          </button>
 
-          {(selectedCategory !== 'all' || selectedBrand !== 'all' || stockStatusFilter !== 'all' || priceRecencyFilter !== 'all' || searchQuery) && (
+          {(selectedCategory !== 'all' || selectedBrand !== 'all' || selectedDistributor !== 'all' || stockStatusFilter !== 'all' || priceRecencyFilter !== 'all' || searchQuery) && (
             <button
               onClick={() => {
                 setSearchQuery('');
                 setSelectedCategory('all');
                 setSelectedBrand('all');
+                setSelectedDistributor('all');
                 setStockStatusFilter('all');
                 setPriceRecencyFilter('all');
               }}
@@ -751,19 +858,26 @@ export const Inventory: React.FC<InventoryProps> = ({
         </div>
       </div>
 
-      {/* Main Product Table */}
+      {/* Main Product Table & Mobile Cards */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* DESKTOP VIEW: FULL TABLE (Hidden on lg and smaller) */}
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
                 <th className="py-3.5 px-4">Sản phẩm & SKU</th>
                 <th className="py-3.5 px-4">Danh mục / Hãng</th>
-                <th className="py-3.5 px-4 text-center">Tồn kho</th>
+                <th className="py-3.5 px-4 text-center">Tồn kho / Trạng thái</th>
                 <th className="py-3.5 px-4 text-right">
                   <div className="flex flex-col items-end">
                     <span>Giá bán niêm yết</span>
                     <span className="text-[10px] text-indigo-600 font-bold lowercase">★ Ngày cập nhật giá</span>
+                  </div>
+                </th>
+                <th className="py-3.5 px-4 text-right">
+                  <div className="flex flex-col items-end">
+                    <span className="text-purple-900">Báo giá NPP & Giá Net</span>
+                    <span className="text-[10px] text-purple-600 font-bold lowercase">★ Trừ quà chiết khấu</span>
                   </div>
                 </th>
                 <th className="py-3.5 px-4 text-right">Giá vốn & Biên lãi</th>
@@ -775,7 +889,7 @@ export const Inventory: React.FC<InventoryProps> = ({
             <tbody className="divide-y divide-slate-100 text-xs">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <Package className="w-8 h-8 mx-auto text-slate-300 mb-2" />
                     <p className="font-semibold">Không tìm thấy sản phẩm nào khớp với điều kiện lọc.</p>
                     <p className="text-[11px] text-slate-400 mt-1">Thử xóa bộ lọc hoặc tìm kiếm với từ khóa khác.</p>
@@ -783,8 +897,8 @@ export const Inventory: React.FC<InventoryProps> = ({
                 </tr>
               ) : (
                 filteredProducts.map((product) => {
-                  const isLowStock = product.stock > 0 && product.stock <= (product.minStockAlert || 5);
-                  const isOutOfStock = product.stock === 0;
+                  const isLowStock = product.stock > 0 && product.stock <= (product.minStockAlert || 5) && !product.isOrderOnDemand;
+                  const isOutOfStock = product.stock === 0 && !product.isOrderOnDemand;
                   const pBrand = getProductBrand(product);
                   const daysSincePriceUpdate = getDaysAgo(product.priceUpdatedAt || product.createdAt);
                   const priceHistoryCount = (product.priceHistory || []).length;
@@ -792,6 +906,13 @@ export const Inventory: React.FC<InventoryProps> = ({
                   const marginPct = product.price > 0 && cost > 0
                     ? (((product.price - cost) / product.price) * 100).toFixed(1)
                     : null;
+
+                  const hasDistributorQuote = Boolean(
+                    product.distributorName || product.distributorBasePrice || product.distributorNetCost || (product.distributorQuotes && product.distributorQuotes.length > 0)
+                  );
+                  const minQty = product.distributorMinQuantity || 1;
+                  const giftValue = product.distributorGiftValue || 0;
+                  const discountPerUnit = Math.round(giftValue / minQty);
 
                   return (
                     <tr key={product.id} className="hover:bg-slate-50/80 transition-colors group">
@@ -806,6 +927,11 @@ export const Inventory: React.FC<InventoryProps> = ({
                               <span className="font-mono text-[11px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
                                 {product.sku}
                               </span>
+                              {product.isOrderOnDemand && (
+                                <span className="bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                                  Hàng đi hỏi giá
+                                </span>
+                              )}
                               {product.description && (
                                 <span className="text-[11px] text-slate-400 truncate max-w-xs" title={product.description}>
                                   {product.description}
@@ -830,24 +956,35 @@ export const Inventory: React.FC<InventoryProps> = ({
                         </div>
                       </td>
 
-                      {/* Stock Quantity */}
+                      {/* Stock Quantity / Status */}
                       <td className="py-3.5 px-4 text-center">
                         <div>
-                          <span
-                            className={`font-black px-3 py-1 rounded-xl text-xs border inline-block ${
-                              isOutOfStock
-                                ? 'bg-rose-100 text-rose-800 border-rose-300'
-                                : isLowStock
-                                ? 'bg-amber-100 text-amber-800 border-amber-300 animate-pulse'
-                                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            }`}
-                          >
-                            {product.stock} {isOutOfStock ? '(Hết hàng)' : 'chiếc'}
-                          </span>
-                          {product.stockUpdatedAt && (
-                            <p className="text-[10px] text-slate-400 mt-1" title={`Kho cập nhật: ${formatDateTimeVI(product.stockUpdatedAt)}`}>
-                              Kiểm kho: {formatDateVI(product.stockUpdatedAt)}
-                            </p>
+                          {product.isOrderOnDemand ? (
+                            <div>
+                              <span className="bg-purple-50 text-purple-800 border border-purple-200 font-bold px-2.5 py-1 rounded-xl text-xs inline-block">
+                                Đi hỏi giá (SL: {product.stock})
+                              </span>
+                              <p className="text-[10px] text-purple-600 mt-0.5">Báo giá theo đơn</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <span
+                                className={`font-black px-3 py-1 rounded-xl text-xs border inline-block ${
+                                  isOutOfStock
+                                    ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                    : isLowStock
+                                    ? 'bg-amber-100 text-amber-800 border-amber-300 animate-pulse'
+                                    : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                }`}
+                              >
+                                {product.stock} {isOutOfStock ? '(Hết hàng)' : 'chiếc'}
+                              </span>
+                              {product.stockUpdatedAt && (
+                                <p className="text-[10px] text-slate-400 mt-1" title={`Kho cập nhật: ${formatDateTimeVI(product.stockUpdatedAt)}`}>
+                                  Kiểm kho: {formatDateVI(product.stockUpdatedAt)}
+                                </p>
+                              )}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -898,6 +1035,64 @@ export const Inventory: React.FC<InventoryProps> = ({
                         </div>
                       </td>
 
+                      {/* Distributor Quote & Net Cost (Gift deduction) */}
+                      <td className="py-3.5 px-4 text-right">
+                        {hasDistributorQuote ? (
+                          <div className="flex flex-col items-end space-y-1">
+                            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                              <span className="font-extrabold text-purple-900 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md text-[10px] inline-flex items-center gap-1">
+                                <Building2 className="w-3 h-3 text-purple-600" />
+                                <span>{product.distributorName || 'NPP chính'}</span>
+                              </span>
+                              {product.distributorQuoteDate && (
+                                <span className="text-[10px] text-slate-400 font-medium">
+                                  {formatDateVI(product.distributorQuoteDate)}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="text-[11px] text-slate-600">
+                              <span>Giá báo: </span>
+                              <span className="font-semibold">{formatVND(product.distributorBasePrice || product.costPrice || 0)}</span>
+                              {product.distributorMinQuantity && (
+                                <span className="text-[10px] text-slate-500"> (Min {product.distributorMinQuantity} con)</span>
+                              )}
+                            </div>
+
+                            {discountPerUnit > 0 && (
+                              <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+                                <Gift className="w-2.5 h-2.5 text-amber-600" />
+                                <span>Trừ quà: -{formatVND(discountPerUnit)}/con</span>
+                              </div>
+                            )}
+
+                            <div className="pt-0.5">
+                              <span className="font-black text-xs text-purple-950 bg-purple-100 border border-purple-300 px-2 py-0.5 rounded-md inline-block">
+                                Net: {formatVND(product.distributorNetCost || product.costPrice || 0)}
+                              </span>
+                            </div>
+
+                            <button
+                              onClick={() => setQuoteModalProduct(product)}
+                              className="text-[10px] font-bold text-purple-700 hover:text-purple-900 hover:underline pt-0.5"
+                            >
+                              ⚙ Báo giá & Chiết khấu
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-end">
+                            <span className="text-[11px] text-slate-400 italic mb-1">Chưa có báo giá NPP</span>
+                            <button
+                              onClick={() => setQuoteModalProduct(product)}
+                              className="inline-flex items-center space-x-1 text-[11px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
+                            >
+                              <Building2 className="w-3 h-3 text-purple-600" />
+                              <span>+ Hỏi giá NPP</span>
+                            </button>
+                          </div>
+                        )}
+                      </td>
+
                       {/* Cost Price & Profit Margin */}
                       <td className="py-3.5 px-4 text-right">
                         <div>
@@ -944,6 +1139,15 @@ export const Inventory: React.FC<InventoryProps> = ({
                       {/* Action Buttons */}
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex items-center justify-center space-x-1.5">
+                          {/* Distributor Quote & Net Cost Calculator */}
+                          <button
+                            onClick={() => setQuoteModalProduct(product)}
+                            title="Báo giá NPP & Tính Net trừ quà chiết khấu"
+                            className="p-1.5 rounded-lg bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white border border-purple-200 transition-all shadow-2xs"
+                          >
+                            <Building2 className="w-3.5 h-3.5" />
+                          </button>
+
                           {/* Quick Update Stock & Price */}
                           <button
                             onClick={() => handleOpenQuickModal(product)}
@@ -987,6 +1191,175 @@ export const Inventory: React.FC<InventoryProps> = ({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* MOBILE VIEW: VERTICAL PRODUCT CARDS (Visible on phone/tablet, hidden on lg+) */}
+        <div className="block lg:hidden divide-y divide-slate-100">
+          {filteredProducts.length === 0 ? (
+            <div className="py-12 px-4 text-center text-slate-400">
+              <Package className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+              <p className="font-semibold text-sm">Không tìm thấy sản phẩm nào.</p>
+              <p className="text-xs text-slate-400 mt-1">Thử xóa bộ lọc hoặc tìm kiếm lại.</p>
+            </div>
+          ) : (
+            filteredProducts.map((product) => {
+              const isLowStock = product.stock > 0 && product.stock <= (product.minStockAlert || 5) && !product.isOrderOnDemand;
+              const isOutOfStock = product.stock === 0 && !product.isOrderOnDemand;
+              const pBrand = getProductBrand(product);
+              const daysSincePriceUpdate = getDaysAgo(product.priceUpdatedAt || product.createdAt);
+              const hasDistributorQuote = Boolean(
+                product.distributorName || product.distributorBasePrice || product.distributorNetCost || (product.distributorQuotes && product.distributorQuotes.length > 0)
+              );
+              const minQty = product.distributorMinQuantity || 1;
+              const giftValue = product.distributorGiftValue || 0;
+              const discountPerUnit = Math.round(giftValue / minQty);
+
+              return (
+                <div key={product.id} className="p-4 space-y-3 bg-white hover:bg-slate-50/50 transition-colors">
+                  {/* Title & SKU & Badges */}
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="font-black text-slate-900 text-sm leading-snug">
+                        {product.name}
+                      </h4>
+                      {product.isOrderOnDemand && (
+                        <span className="shrink-0 bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded text-[10px] font-bold">
+                          Hàng đi hỏi
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                      <span className="font-mono text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                        {product.sku}
+                      </span>
+                      <span className="bg-blue-50 text-blue-800 font-bold px-2 py-0.5 rounded text-[10px] border border-blue-200">
+                        {product.category}
+                      </span>
+                      {pBrand && (
+                        <span className="bg-indigo-50 text-indigo-800 font-bold px-2 py-0.5 rounded text-[10px] border border-indigo-200">
+                          {pBrand}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stock & Retail Price Row */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-500 font-semibold block">Tồn kho / Trạng thái</span>
+                      {product.isOrderOnDemand ? (
+                        <span className="text-xs font-bold text-purple-700">Đi hỏi giá (SL: {product.stock})</span>
+                      ) : (
+                        <span
+                          className={`text-xs font-black inline-block mt-0.5 ${
+                            isOutOfStock
+                              ? 'text-rose-700'
+                              : isLowStock
+                              ? 'text-amber-700'
+                              : 'text-emerald-700'
+                          }`}
+                        >
+                          {product.stock} chiếc {isOutOfStock ? '(Hết hàng)' : ''}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-right">
+                      <span className="text-[10px] text-slate-500 font-semibold block">Giá niêm yết</span>
+                      <span className="text-xs font-black text-slate-900 block mt-0.5">{formatVND(product.price)}</span>
+                      <span className="text-[10px] text-indigo-600 font-medium block">
+                        Đổi: {formatDateVI(product.priceUpdatedAt || product.createdAt)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Distributor Quote Card Block */}
+                  <div className="bg-gradient-to-r from-purple-50/70 to-indigo-50/70 p-3 rounded-xl border border-purple-200 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-[11px] text-purple-900 flex items-center gap-1">
+                        <Building2 className="w-3.5 h-3.5 text-purple-600" />
+                        <span>{product.distributorName || 'Chưa lưu NPP'}</span>
+                      </span>
+                      {product.distributorQuoteDate && (
+                        <span className="text-[10px] text-slate-500 font-semibold">
+                          Ngày hỏi: {formatDateVI(product.distributorQuoteDate)}
+                        </span>
+                      )}
+                    </div>
+
+                    {hasDistributorQuote ? (
+                      <>
+                        <div className="flex items-center justify-between text-xs pt-1">
+                          <span className="text-slate-600 text-[11px]">
+                            Giá báo: <strong>{formatVND(product.distributorBasePrice || product.costPrice || 0)}</strong>
+                            {product.distributorMinQuantity ? ` (Min ${product.distributorMinQuantity} con)` : ''}
+                          </span>
+                          {discountPerUnit > 0 && (
+                            <span className="text-[10px] font-bold text-amber-700 bg-amber-100/70 border border-amber-300 px-1.5 py-0.5 rounded">
+                              Quà: -{formatVND(discountPerUnit)}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1 border-t border-purple-200/60">
+                          <span className="text-[11px] font-bold text-purple-950">Giá Net thực tế:</span>
+                          <span className="text-sm font-black text-purple-900 bg-white px-2 py-0.5 rounded-md border border-purple-300 shadow-2xs">
+                            {formatVND(product.distributorNetCost || product.costPrice || 0)}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-slate-500 italic">
+                        Chưa có dữ liệu báo giá & trừ quà từ NPP cho mẫu này.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Touch Action Buttons (>= 44px) */}
+                  <div className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setQuoteModalProduct(product)}
+                      className="min-h-[44px] flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold text-xs px-3 py-2.5 rounded-xl flex items-center justify-center space-x-1.5 shadow-sm active:scale-95 transition-all"
+                    >
+                      <Building2 className="w-4 h-4 text-amber-300" />
+                      <span>Báo giá NPP & Tính Net</span>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenQuickModal(product)}
+                        title="Đổi nhanh giá & kho"
+                        className="min-h-[44px] flex-1 sm:flex-none px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1"
+                      >
+                        <Zap className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Sửa giá</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditModal(product)}
+                        title="Chỉnh sửa sản phẩm"
+                        className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-blue-700 font-bold text-xs flex items-center justify-center"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteProduct(product.id, product.name)}
+                        title="Xóa sản phẩm"
+                        className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-100 hover:bg-rose-100 text-rose-600 font-bold text-xs flex items-center justify-center"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -1628,6 +2001,124 @@ export const Inventory: React.FC<InventoryProps> = ({
                 )}
               </div>
 
+              {/* Distributor Quote & Net Cost Calculator Section */}
+              <div className="bg-purple-50/70 p-4 rounded-xl border border-purple-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Building2 className="w-4 h-4 text-purple-600" />
+                    <span className="text-xs font-extrabold text-purple-900">
+                      Báo giá Nhà phân phối & Chiết khấu quà tặng
+                    </span>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isOrderOnDemand}
+                      onChange={(e) => setIsOrderOnDemand(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                    <span className="ml-2 text-xs font-bold text-purple-900">Hàng đi hỏi giá (Theo yêu cầu)</span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Nhà phân phối báo giá</label>
+                    <input
+                      type="text"
+                      list="distributor-presets-form-list"
+                      placeholder="VD: NPP Daikin, Chợ Lớn..."
+                      value={formDistributorName}
+                      onChange={(e) => setFormDistributorName(e.target.value)}
+                      className="w-full text-xs px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white font-medium"
+                    />
+                    <datalist id="distributor-presets-form-list">
+                      {allDistributors.map((npp) => (
+                        <option key={npp} value={npp} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Ngày hỏi giá / Báo giá</label>
+                    <input
+                      type="date"
+                      value={formDistributorDate}
+                      onChange={(e) => setFormDistributorDate(e.target.value)}
+                      className="w-full text-xs px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Giá báo gốc từ NPP (VNĐ)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1000"
+                      placeholder="VD: 10000000"
+                      value={formDistributorBasePrice}
+                      onChange={(e) => setFormDistributorBasePrice(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full text-xs px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white font-bold text-purple-950"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Bậc số lượng tối thiểu (VD: 5 con)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="5"
+                      value={formDistributorMinQty}
+                      onChange={(e) => setFormDistributorMinQty(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full text-xs px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Tên quà tặng kèm (Nếu có)</label>
+                    <input
+                      type="text"
+                      placeholder="VD: Tặng kèm lò vi sóng, quạt đứng..."
+                      value={formDistributorGiftDesc}
+                      onChange={(e) => setFormDistributorGiftDesc(e.target.value)}
+                      className="w-full text-xs px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Tổng giá trị quà quy đổi (VNĐ)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1000"
+                      placeholder="VD: 1500000"
+                      value={formDistributorGiftValue}
+                      onChange={(e) => setFormDistributorGiftValue(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full text-xs px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white font-medium"
+                    />
+                  </div>
+                </div>
+
+                {formDistributorBasePrice !== '' && Number(formDistributorBasePrice) > 0 && (
+                  <div className="p-2.5 bg-white rounded-lg border border-purple-200 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-slate-500 block text-[10px]">Trừ quà chiết khấu trên mỗi con:</span>
+                      <span className="font-bold text-amber-700">
+                        - {formatVND(Math.round((Number(formDistributorGiftValue) || 0) / Math.max(1, Number(formDistributorMinQty) || 1)))}/con
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-purple-700 block text-[10px] font-bold">Giá Net thực tế:</span>
+                      <span className="text-sm font-black text-purple-900">
+                        {formatVND(Math.max(0, Number(formDistributorBasePrice) - Math.round((Number(formDistributorGiftValue) || 0) / Math.max(1, Number(formDistributorMinQty) || 1))))}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Mô tả / Ghi chú sản phẩm</label>
                 <textarea
@@ -1800,6 +2291,21 @@ export const Inventory: React.FC<InventoryProps> = ({
           }}
         />
       )}
+
+      {/* Distributor Quote & Net Cost Calculator Modal */}
+      {quoteModalProduct && (
+        <DistributorQuoteModal
+          product={quoteModalProduct}
+          isOpen={Boolean(quoteModalProduct)}
+          onClose={() => setQuoteModalProduct(null)}
+          onProductUpdated={() => {
+            setQuoteModalProduct(null);
+            setSyncSuccessToast('Đã lưu thành công báo giá NPP và tính toán giá Net chiết khấu!');
+            setTimeout(() => setSyncSuccessToast(null), 4000);
+          }}
+        />
+      )}
     </div>
   );
 };
+

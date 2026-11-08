@@ -559,6 +559,70 @@ export function initRealtimeFirestoreSync(onDataChange?: () => void) {
 
     realtimeUnsubscribes = [unsubOrders, unsubProducts, unsubTrips];
 
+    // 4. Price Hub Listeners (Price Products, Suppliers, Quotations)
+    try {
+      const unsubPriceProds = onSnapshot(
+        collection(db, 'priceProducts'),
+        (snapshot) => {
+          if (snapshot.empty) return;
+          const remote: any[] = [];
+          snapshot.forEach((snap) => {
+            const d = snap.data();
+            if (d && d.id && d.name) remote.push(d);
+          });
+          if (remote.length > 0) {
+            localStorage.setItem('kdt89_price_products', JSON.stringify(remote));
+            if (onDataChange) onDataChange();
+          }
+        },
+        (err) => {
+          console.warn('Realtime priceProducts sync notice:', err);
+        }
+      );
+
+      const unsubSuppliers = onSnapshot(
+        collection(db, 'suppliers'),
+        (snapshot) => {
+          if (snapshot.empty) return;
+          const remote: any[] = [];
+          snapshot.forEach((snap) => {
+            const d = snap.data();
+            if (d && d.id && d.name) remote.push(d);
+          });
+          if (remote.length > 0) {
+            localStorage.setItem('kdt89_price_suppliers', JSON.stringify(remote));
+            if (onDataChange) onDataChange();
+          }
+        },
+        (err) => {
+          console.warn('Realtime suppliers sync notice:', err);
+        }
+      );
+
+      const unsubQuotes = onSnapshot(
+        collection(db, 'supplierQuotations'),
+        (snapshot) => {
+          if (snapshot.empty) return;
+          const remote: any[] = [];
+          snapshot.forEach((snap) => {
+            const d = snap.data();
+            if (d && d.id && d.quotationCode) remote.push(d);
+          });
+          if (remote.length > 0) {
+            localStorage.setItem('kdt89_price_quotations', JSON.stringify(remote));
+            if (onDataChange) onDataChange();
+          }
+        },
+        (err) => {
+          console.warn('Realtime supplierQuotations sync notice:', err);
+        }
+      );
+
+      realtimeUnsubscribes.push(unsubPriceProds, unsubSuppliers, unsubQuotes);
+    } catch (e) {
+      console.warn('Price Hub realtime sync notice:', e);
+    }
+
     return () => {
       realtimeUnsubscribes.forEach((unsub) => unsub());
       realtimeUnsubscribes = [];

@@ -24,6 +24,8 @@ import { DeliverySlip } from './components/DeliverySlip';
 import { OrderDetailModal } from './components/OrderDetailModal';
 import { DataManagementModal } from './components/DataManagementModal';
 import { DeliverySchedule } from './components/DeliverySchedule';
+import { PriceLookup } from './components/PriceLookup';
+import { KdtPriceHub } from './components/pricehub/KdtPriceHub';
 import { initRealtimeFirestoreSync } from './services/firebaseService';
 
 export default function App() {
@@ -143,6 +145,26 @@ export default function App() {
             categories={categories}
             brands={brands}
             onNavigateToMasterData={() => setActiveTab('master-data')}
+          />
+        )}
+
+        {activeTab === 'kdt-price-hub' && (
+          <KdtPriceHub
+            inventoryProducts={products}
+            onNavigateToInventory={() => setActiveTab('inventory')}
+            onNavigateToCreateOrder={(prodName) => {
+              setActiveTab('create-order');
+            }}
+          />
+        )}
+
+        {activeTab === 'price-lookup' && (
+          <PriceLookup
+            products={products}
+            onNavigateToInventory={() => setActiveTab('inventory')}
+            onNavigateToCreateOrder={(prod) => {
+              setActiveTab('create-order');
+            }}
           />
         )}
 

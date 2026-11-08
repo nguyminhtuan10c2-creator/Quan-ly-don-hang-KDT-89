@@ -125,6 +125,66 @@
         "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["id", "tripCode", "departureLocationName", "departureAddress", "status", "createdAt"]
+    },
+    "PriceProduct": {
+      "title": "PriceProduct",
+      "description": "Products inquired by Sales team from various distributors",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "internalCode": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 256 },
+        "model": { "type": "string", "maxLength": 128 },
+        "brand": { "type": "string", "maxLength": 128 },
+        "unit": { "type": "string", "maxLength": 32 },
+        "category": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "internalCode", "name", "unit", "category", "createdAt"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Distributors and suppliers providing quotations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "code": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 256 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "code", "name", "isActive", "createdAt"]
+    },
+    "SupplierQuotation": {
+      "title": "SupplierQuotation",
+      "description": "Supplier quotation records with items, net pricing, discounts, and audit trail",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "quotationCode": { "type": "string", "maxLength": 64 },
+        "supplierId": { "type": "string", "maxLength": 128 },
+        "supplierName": { "type": "string", "maxLength": 256 },
+        "quoteDate": { "type": "string", "maxLength": 64 },
+        "currency": { "type": "string", "maxLength": 16 },
+        "status": { "type": "string", "enum": ["valid", "expired", "negotiating"] },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "quotationCode", "supplierId", "supplierName", "quoteDate", "status", "createdBy", "createdAt"]
+    },
+    "QuotationAuditLog": {
+      "title": "QuotationAuditLog",
+      "description": "Immutable audit log tracking all modifications to quotations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "action": { "type": "string", "enum": ["create", "update", "delete", "merge_product", "import_file", "link_inventory"] },
+        "description": { "type": "string", "maxLength": 512 },
+        "changedBy": { "type": "string", "maxLength": 128 },
+        "changedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "action", "description", "changedBy", "changedAt"]
     }
   },
   "firestore": {
@@ -151,6 +211,22 @@
     "/deliveryTrips/{tripId}": {
       "schema": "DeliveryTrip",
       "description": "Multi-stop bundled delivery trips"
+    },
+    "/priceProducts/{docId}": {
+      "schema": "PriceProduct",
+      "description": "Price inquiry catalog products"
+    },
+    "/suppliers/{docId}": {
+      "schema": "Supplier",
+      "description": "Distributors and supplier partners"
+    },
+    "/supplierQuotations/{docId}": {
+      "schema": "SupplierQuotation",
+      "description": "Quotation events and line items"
+    },
+    "/quotationAuditLogs/{docId}": {
+      "schema": "QuotationAuditLog",
+      "description": "Immutable audit trails for quote modifications"
     }
   }
 }
